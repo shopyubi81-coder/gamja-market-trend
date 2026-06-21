@@ -1,0 +1,24 @@
+# 환경변수 (절대 커밋 금지 — API 키 노출 방지!)
+.env
+.env.local
+.env.*.local
+
+# 의존성
+node_modules/
+
+# 로그
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Supabase 로컬
+supabase/.branches
+supabase/.temp
+.supabase/
+
+# 에디터
+.vscode/
+.idea/

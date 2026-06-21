@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>감자마켓 트렌드 대시보드</title>
+<style>
+  :root {
+    --primary: #FF6B2C;
+    --primary-light: #FF8F5A;
+    --bg: #F7F8FA;
+    --card: #FFFFFF;
+    --text: #1A1A2E;
+    --sub: #6B7280;
+    --border: #E5E7EB;
+    --coupang: #E4393C;
+    --naver: #03C75A;
+    --insta: #C13584;
+    --up: #EF4444;
+    --down: #3B82F6;
+    --new: #8B5CF6;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+
+  /* Header */
+  header {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--primary);
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--primary);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 18px;
+  }
+  .header-right {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .date-badge {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: var(--sub);
+    font-weight: 500;
+  }
+  .selected-count-badge {
+    background: var(--primary);
+    color: white;
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .selected-count-badge:hover { background: var(--primary-light); }
+
+  /* Main Layout */
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* Period Selector */
+  .period-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .period-label { font-size: 13px; color: var(--sub); margin-right: 4px; font-weight: 500; }
+  .period-btn {
+    padding: 8px 20px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: white;
+    color: var(--sub);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .period-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .period-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+    box-shadow: 0 2px 8px rgba(255,107,44,0.3);
+  }
+
+  /* Platform Tabs */
+  .platform-tabs {
+    display: flex;
+    gap: 0;
+    background: white;
+    border-radius: 12px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+    width: fit-content;
+  }
+  .platform-tab {
+    padding: 10px 24px;
+    border-radius: 9px;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--sub);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .platform-tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .platform-tab[data-platform="all"] .dot { background: var(--primary); }
+  .platform-tab[data-platform="coupang"] .dot { background: var(--coupang); }
+  .platform-tab[data-platform="naver"] .dot { background: var(--naver); }
+  .platform-tab[data-platform="instagram"] .dot { background: var(--insta); }
+  .platform-tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+
+  /* Dashboard Grid */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 1100px) { .dashboard { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 700px) { .dashboard { grid-template-columns: 1fr; } }
+
+  /* Summary Cards */
+  .summary-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .summary-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+  .summary-card .label { font-size: 12px; color: var(--sub); margin-bottom: 6px; font-weight: 500; }
+  .summary-card .value { font-size: 24px; font-weight: 700; color: var(--text); }
+  .summary-card .change { font-size: 12px; margin-top: 4px; }
+  .change.up { color: var(--up); }
+  .change.down { color: var(--down); }
+
+  /* Trend Panel */
+  .trend-panel {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-platform-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    color: white;
+  }
+  .badge-coupang { background: var(--coupang); }
+  .badge-naver { background: var(--naver); }
+  .badge-instagram { background: var(--insta); }
+  .badge-all { background: var(--primary); }
+
+  /* Trend Items */
+  .trend-list { padding: 8px 0; }
+  .trend-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    gap: 12px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border-bottom: 1px solid #F3F4F6;
+  }
+  .trend-item:last-child { border-bottom: none; }
+  .trend-item:hover { background: #F9FAFB; }
+  .trend-item.selected { background: #FFF5F0; }
+
+  .rank {
+    width: 28px;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--sub);
+    flex-shrink: 0;
+  }
+  .rank.top3 { color: var(--primary); font-size: 16px; }
+
+  .item-emoji {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+
+  .item-info { flex: 1; min-width: 0; }
+  .item-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item-category {
+    font-size: 11px;
+    color: var(--sub);
+    margin-top: 2px;
+  }
+
+  .item-trend {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+  .trend-change {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+  .trend-change.up { background: #FEE2E2; color: var(--up); }
+  .trend-change.down { background: #DBEAFE; color: var(--down); }
+  .trend-change.new { background: #EDE9FE; color: var(--new); }
+  .trend-change.same { background: #F3F4F6; color: var(--sub); }
+
+  .trend-score { font-size: 11px; color: var(--sub); }
+
+  .select-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: white;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+  .select-btn:hover { border-color: var(--primary); background: #FFF5F0; }
+  .select-btn.selected { background: var(--primary); border-color: var(--primary); color: white; }
+
+  /* Mini chart sparkline */
+  .sparkline {
+    width: 60px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  /* Selected Products Drawer */
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed;
+    top: 0; right: -480px;
+    width: 480px;
+    height: 100vh;
+    background: white;
+    z-index: 201;
+    transition: right 0.3s cubic-bezier(0.4,0,0.2,1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+  }
+  .drawer.open { right: 0; }
+  .drawer-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .drawer-title { font-size: 17px; font-weight: 700; }
+  .drawer-close {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: white;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 16px 24px; }
+  .drawer-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px;
+  }
+  .btn-primary {
+    flex: 1;
+    padding: 12px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--primary-light); }
+  .btn-outline {
+    padding: 12px 20px;
+    background: white;
+    color: var(--sub);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .selected-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .selected-item .item-emoji { width: 36px; height: 36px; font-size: 20px; }
+  .selected-item .info { flex: 1; }
+  .selected-item .name { font-size: 14px; font-weight: 600; }
+  .selected-item .meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .remove-btn {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: white;
+    cursor: pointer;
+    color: var(--sub);
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .remove-btn:hover { background: #FEE2E2; color: var(--up); border-color: var(--up); }
+
+  /* Note textarea in drawer */
+  .note-area {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 70px;
+    margin-top: 6px;
+    font-family: inherit;
+    color: var(--text);
+  }
+  .note-label { font-size: 12px; font-weight: 600; color: var(--sub); margin-top: 12px; display: block; }
+
+  /* Category filter */
+  .category-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+  .cat-btn {
+    padding: 5px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: white;
+    font-size: 12px;
+    color: var(--sub);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .cat-btn:hover, .cat-btn.active { border-color: var(--primary); color: var(--primary); background: #FFF5F0; }
+
+  /* Section title */
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--sub);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Keyword cloud */
+  .keyword-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 16px 20px;
+  }
+  .keyword-tag {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .keyword-tag:hover { transform: scale(1.05); }
+  .kw-size-1 { font-size: 11px; background: #F3F4F6; color: var(--sub); }
+  .kw-size-2 { font-size: 13px; background: #FEF3C7; color: #92400E; }
+  .kw-size-3 { font-size: 15px; background: #FCE7F3; color: #9D174D; }
+  .kw-size-4 { font-size: 17px; background: #FFF5F0; color: var(--primary); font-weight: 700; }
+
+  /* Refresh button */
+  .refresh-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: white;
+    font-size: 12px;
+    color: var(--sub);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .refresh-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--sub);
+  }
+  .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-state p { font-size: 14px; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--text);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 300;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+    pointer-events: none;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Chart area */
+  .chart-container {
+    padding: 16px 20px;
+  }
+  .chart-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .chart-label { width: 80px; font-size: 12px; color: var(--sub); text-align: right; }
+  .chart-bar-wrap { flex: 1; background: var(--bg); border-radius: 4px; height: 20px; overflow: hidden; }
+  .chart-bar { height: 100%; border-radius: 4px; transition: width 0.5s; display: flex; align-items: center; padding-left: 8px; }
+  .chart-bar span { font-size: 11px; color: white; font-weight: 600; }
+  .chart-bar.coupang { background: var(--coupang); }
+  .chart-bar.naver { background: var(--naver); }
+  .chart-bar.instagram { background: var(--insta); }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🥔</div>
+    감자마켓 트렌드 대시보드
+  </div>
+  <div class="header-right">
+    <div class="date-badge" id="currentDate"></div>
+    <div class="selected-count-badge" onclick="openDrawer()">
+      📋 선별 목록 <span id="selectedCountBadge">0</span>개
+    </div>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="container">
+
+  <!-- Period Selector -->
+  <div class="period-bar">
+    <span class="period-label">기간</span>
+    <button class="period-btn active" onclick="setPeriod('daily', this)">일간</button>
+    <button class="period-btn" onclick="setPeriod('weekly', this)">주간</button>
+    <button class="period-btn" onclick="setPeriod('monthly', this)">월간</button>
+    <button class="period-btn" onclick="setPeriod('yearly', this)">연간</button>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="summary-row">
+    <div class="summary-card">
+      <div class="label">🔥 오늘 인기 키워드</div>
+      <div class="value" id="summaryKeywords">127</div>
+      <div class="change up" id="summaryKeywordsChange">▲ 전일 대비 +12%</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">📦 신규 트렌드 상품</div>
+      <div class="value" id="summaryNew">34</div>
+      <div class="change up" id="summaryNewChange">▲ +8개 신규</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">⬆️ 급상승 카테고리</div>
+      <div class="value" id="summaryCategory">식품/건강</div>
+      <div class="change up" id="summaryCategoryChange">▲ +28% 상승</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">✅ 내 선별 상품</div>
+      <div class="value" id="summarySelected">0</div>
+      <div class="change" id="summarySelectedChange" style="color: var(--sub)">오늘 선별한 상품</div>
+    </div>
+  </div>
+
+  <!-- Platform Tabs -->
+  <div class="platform-tabs">
+    <button class="platform-tab active" data-platform="all" onclick="setPlatform('all', this)">
+      <span class="dot"></span> 전체
+    </button>
+    <button class="platform-tab" data-platform="coupang" onclick="setPlatform('coupang', this)">
+      <span class="dot"></span> 쿠팡
+    </button>
+    <button class="platform-tab" data-platform="naver" onclick="setPlatform('naver', this)">
+      <span class="dot"></span> 네이버
+    </button>
+    <button class="platform-tab" data-platform="instagram" onclick="setPlatform('instagram', this)">
+      <span class="dot"></span> 인스타그램
+    </button>
+  </div>
+
+  <!-- Category Filter -->
+  <div class="category-filter" id="categoryFilter">
+    <button class="cat-btn active" onclick="setCategory('all', this)">전체</button>
+    <button class="cat-btn" onclick="setCategory('food', this)">🍎 식품/건강</button>
+    <button class="cat-btn" onclick="setCategory('beauty', this)">💄 뷰티/화장품</button>
+    <button class="cat-btn" onclick="setCategory('fashion', this)">👗 패션/의류</button>
+    <button class="cat-btn" onclick="setCategory('home', this)">🏠 홈/리빙</button>
+    <button class="cat-btn" onclick="setCategory('kids', this)">🧸 유아동</button>
+    <button class="cat-btn" onclick="setCategory('pet', this)">🐾 반려동물</button>
+    <button class="cat-btn" onclick="setCategory('digital', this)">📱 디지털/가전</button>
+  </div>
+
+  <!-- Dashboard Grid -->
+  <div class="dashboard" id="dashboard">
+    <!-- Injected by JS -->
+  </div>
+
+</div>
+
+<!-- Drawer Overlay -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">📋 오늘의 선별 상품</div>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-footer">
+    <button class="btn-outline" onclick="clearSelected()">전체 해제</button>
+    <button class="btn-primary" onclick="exportList()">📤 목록 내보내기</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== DATA =====
+const MOCK_DATA = {
+  coupang: {
+    daily: [
+      { id:'c1', name:'제주 감귤 5kg', category:'식품/건강', cat:'food', emoji:'🍊', trend:'up', change:'+23%', score:'98점', note:'SNS 바이럴 급상승' },
+      { id:'c2', name:'콜라겐 젤리 스틱', category:'식품/건강', cat:'food', emoji:'🍬', trend:'new', change:'NEW', score:'96점', note:'건강 간식 트렌드' },
+      { id:'c3', name:'에어팟 프로 케이스', category:'디지털/가전', cat:'digital', emoji:'🎧', trend:'up', change:'+15%', score:'94점', note:'가성비 액세서리' },
+      { id:'c4', name:'무형광 면 속옷 세트', category:'패션/의류', cat:'fashion', emoji:'👕', trend:'up', change:'+12%', score:'91점', note:'MZ 친환경 소비' },
+      { id:'c5', name:'강아지 관절영양제', category:'반려동물', cat:'pet', emoji:'🐕', trend:'same', change:'=', score:'89점', note:'반려견 건강 관심↑' },
+      { id:'c6', name:'스타벅스 텀블러', category:'홈/리빙', cat:'home', emoji:'☕', trend:'down', change:'-5%', score:'87점', note:'시즌 종료 영향' },
+      { id:'c7', name:'키즈 우산 공룡', category:'유아동', cat:'kids', emoji:'🦕', trend:'up', change:'+31%', score:'85점', note:'장마철 수요 급증' },
+      { id:'c8', name:'흑임자 라떼 분말', category:'식품/건강', cat:'food', emoji:'🖤', trend:'new', change:'NEW', score:'83점', note:'카페 음료 홈카페화' },
+      { id:'c9', name:'투명 지퍼백 대형', category:'홈/리빙', cat:'home', emoji:'🛍️', trend:'up', change:'+9%', score:'81점', note:'정리정돈 트렌드' },
+      { id:'c10', name:'선크림 SPF50+', category:'뷰티/화장품', cat:'beauty', emoji:'🧴', trend:'up', change:'+18%', score:'79점', note:'여름 자외선 차단' },
+    ],
+    weekly: [
+      { id:'c1w', name:'냉감 침구 세트', category:'홈/리빙', cat:'home', emoji:'🛏️', trend:'up', change:'+45%', score:'99점', note:'여름 필수템' },
+      { id:'c2w', name:'탄산수 메이커', category:'홈/리빙', cat:'home', emoji:'💧', trend:'up', change:'+33%', score:'95점', note:'홈카페 트렌드' },
+      { id:'c3w', name:'닭가슴살 큐브', category:'식품/건강', cat:'food', emoji:'🍗', trend:'up', change:'+28%', score:'93점', note:'다이어트 시즌' },
+      { id:'c4w', name:'마스카라 롱래쉬', category:'뷰티/화장품', cat:'beauty', emoji:'💄', trend:'new', change:'NEW', score:'91점', note:'유튜버 바이럴' },
+      { id:'c5w', name:'어린이 비타민C', category:'유아동', cat:'kids', emoji:'🍋', trend:'up', change:'+22%', score:'89점', note:'면역 챙기기 트렌드' },
+      { id:'c6w', name:'반려묘 캣타워', category:'반려동물', cat:'pet', emoji:'🐱', trend:'same', change:'=', score:'87점', note:'꾸준한 인기' },
+      { id:'c7w', name:'무선 충전 패드', category:'디지털/가전', cat:'digital', emoji:'⚡', trend:'up', change:'+19%', score:'85점', note:'스마트 라이프' },
+      { id:'c8w', name:'린넨 와이드 팬츠', category:'패션/의류', cat:'fashion', emoji:'👖', trend:'up', change:'+16%', score:'83점', note:'여름 편안함 룩' },
+      { id:'c9w', name:'수박 슬라이서', category:'홈/리빙', cat:'home', emoji:'🍉', trend:'new', change:'NEW', score:'81점', note:'여름 과일 시즌' },
+      { id:'c10w', name:'오메가3 프리미엄', category:'식품/건강', cat:'food', emoji:'🐟', trend:'up', change:'+11%', score:'79점', note:'건강 보조식품 붐' },
+    ],
+    monthly: [
+      { id:'c1m', name:'에어컨 필터 교체', category:'홈/리빙', cat:'home', emoji:'❄️', trend:'up', change:'+67%', score:'99점', note:'여름 에어컨 시즌' },
+      { id:'c2m', name:'자외선 차단 팔토시', category:'패션/의류', cat:'fashion', emoji:'💪', trend:'up', change:'+54%', score:'96점', note:'야외활동 증가' },
+      { id:'c3m', name:'냉장고 정리함', category:'홈/리빙', cat:'home', emoji:'🧊', trend:'up', change:'+41%', score:'93점', note:'정리 유튜버 영향' },
+      { id:'c4m', name:'프로틴 초코맛', category:'식품/건강', cat:'food', emoji:'💪', trend:'new', change:'NEW', score:'90점', note:'헬스 유행 지속' },
+      { id:'c5m', name:'썬글라스 오버사이즈', category:'패션/의류', cat:'fashion', emoji:'😎', trend:'up', change:'+35%', score:'88점', note:'여름 패션 필수' },
+      { id:'c6m', name:'캠핑 접이식 의자', category:'홈/리빙', cat:'home', emoji:'⛺', trend:'up', change:'+29%', score:'86점', note:'캠핑 문화 확산' },
+      { id:'c7m', name:'어린이 수영복', category:'유아동', cat:'kids', emoji:'🏊', trend:'up', change:'+48%', score:'84점', note:'여름방학 시즌' },
+      { id:'c8m', name:'반려견 쿨매트', category:'반려동물', cat:'pet', emoji:'🐾', trend:'up', change:'+55%', score:'82점', note:'폭염 반려동물 케어' },
+      { id:'c9m', name:'냉감 마스크', category:'패션/의류', cat:'fashion', emoji:'😷', trend:'same', change:'=', score:'80점', note:'여름 마스크 수요' },
+      { id:'c10m', name:'식용 얼음트레이', category:'홈/리빙', cat:'home', emoji:'🧊', trend:'up', change:'+22%', score:'78점', note:'홈파티 트렌드' },
+    ],
+    yearly: [
+      { id:'c1y', name:'공기청정기 필터', category:'홈/리빙', cat:'home', emoji:'🌬️', trend:'up', change:'+120%', score:'99점', note:'미세먼지 연중 관심' },
+      { id:'c2y', name:'전기에어프라이어', category:'홈/리빙', cat:'home', emoji:'🍳', trend:'up', change:'+89%', score:'97점', note:'홈쿠킹 트렌드 정착' },
+      { id:'c3y', name:'건강기능식품 세트', category:'식품/건강', cat:'food', emoji:'💊', trend:'up', change:'+76%', score:'95점', note:'건강 라이프 대세' },
+      { id:'c4y', name:'무선 이어폰', category:'디지털/가전', cat:'digital', emoji:'🎵', trend:'up', change:'+65%', score:'93점', note:'리모트워크 영향' },
+      { id:'c5y', name:'요가 매트 세트', category:'홈/리빙', cat:'home', emoji:'🧘', trend:'up', change:'+58%', score:'91점', note:'홈트 지속 성장' },
+      { id:'c6y', name:'유기농 이유식', category:'유아동', cat:'kids', emoji:'👶', trend:'up', change:'+49%', score:'89점', note:'프리미엄 육아 트렌드' },
+      { id:'c7y', name:'반려동물 보험', category:'반려동물', cat:'pet', emoji:'🐶', trend:'new', change:'NEW', score:'87점', note:'펫보험 인식 확산' },
+      { id:'c8y', name:'전동 칫솔', category:'뷰티/화장품', cat:'beauty', emoji:'🪥', trend:'up', change:'+43%', score:'85점', note:'구강 건강 관심↑' },
+      { id:'c9y', name:'텀블러/보틀', category:'홈/리빙', cat:'home', emoji:'🫙', trend:'up', change:'+37%', score:'83점', note:'친환경 소비 확산' },
+      { id:'c10y', name:'리유저블 백', category:'패션/의류', cat:'fashion', emoji:'🛍️', trend:'up', change:'+31%', score:'81점', note:'에코 라이프 트렌드' },
+    ]
+  },
+  naver: {
+    daily: [
+      { id:'n1', name:'장마철 제습제', category:'홈/리빙', cat:'home', emoji:'💧', trend:'up', change:'+156%', score:'검색량 최고', note:'장마 시작' },
+      { id:'n2', name:'여름 원피스 롱', category:'패션/의류', cat:'fashion', emoji:'👗', trend:'up', change:'+89%', score:'검색량 급증', note:'여름 패션 시즌' },
+      { id:'n3', name:'냉면 밀키트', category:'식품/건강', cat:'food', emoji:'🍜', trend:'new', change:'NEW', score:'신규 인기', note:'여름 음식 트렌드' },
+      { id:'n4', name:'수분크림 추천', category:'뷰티/화장품', cat:'beauty', emoji:'💆', trend:'up', change:'+45%', score:'검색량 높음', note:'여름 스킨케어' },
+      { id:'n5', name:'캠핑 텐트 소형', category:'홈/리빙', cat:'home', emoji:'⛺', trend:'up', change:'+67%', score:'관심도↑', note:'주말 캠핑족 증가' },
+      { id:'n6', name:'아동 물놀이 용품', category:'유아동', cat:'kids', emoji:'🤿', trend:'up', change:'+112%', score:'검색량 최고', note:'방학 물놀이' },
+      { id:'n7', name:'고양이 모래 추천', category:'반려동물', cat:'pet', emoji:'🐈', trend:'same', change:'=', score:'꾸준', note:'반려묘 인기 지속' },
+      { id:'n8', name:'노트북 거치대', category:'디지털/가전', cat:'digital', emoji:'💻', trend:'up', change:'+23%', score:'검색량 증가', note:'재택근무 트렌드' },
+      { id:'n9', name:'아이스크림 케이크', category:'식품/건강', cat:'food', emoji:'🎂', trend:'new', change:'NEW', score:'신규 급상승', note:'여름 파티 시즌' },
+      { id:'n10', name:'방수 파우치 소형', category:'패션/의류', cat:'fashion', emoji:'👜', trend:'up', change:'+34%', score:'관심도↑', note:'여름 물놀이' },
+    ],
+    weekly: [
+      { id:'n1w', name:'바베큐 그릴 세트', category:'홈/리빙', cat:'home', emoji:'🍖', trend:'up', change:'+78%', score:'검색량 최고', note:'여름 아웃도어' },
+      { id:'n2w', name:'수영복 여성', category:'패션/의류', cat:'fashion', emoji:'👙', trend:'up', change:'+201%', score:'폭발적 증가', note:'해수욕 시즌' },
+      { id:'n3w', name:'다이어트 식품', category:'식품/건강', cat:'food', emoji:'🥗', trend:'up', change:'+55%', score:'검색량 증가', note:'여름 다이어트' },
+      { id:'n4w', name:'탈색약 세트', category:'뷰티/화장품', cat:'beauty', emoji:'✨', trend:'new', change:'NEW', score:'신규 트렌드', note:'여름 헤어 변화' },
+      { id:'n5w', name:'방탄소년단 굿즈', category:'패션/의류', cat:'fashion', emoji:'🎤', trend:'up', change:'+89%', score:'팬덤 트렌드', note:'컴백 시즌' },
+      { id:'n6w', name:'영아 수유쿠션', category:'유아동', cat:'kids', emoji:'🍼', trend:'same', change:'=', score:'꾸준', note:'육아 필수템' },
+      { id:'n7w', name:'강아지 샴푸', category:'반려동물', cat:'pet', emoji:'🚿', trend:'up', change:'+29%', score:'검색량↑', note:'여름 반려견 위생' },
+      { id:'n8w', name:'스마트워치 비교', category:'디지털/가전', cat:'digital', emoji:'⌚', trend:'up', change:'+44%', score:'관심도↑', note:'웨어러블 트렌드' },
+      { id:'n9w', name:'냉장고 이중수납', category:'홈/리빙', cat:'home', emoji:'🧊', trend:'up', change:'+36%', score:'검색량↑', note:'정리 트렌드' },
+      { id:'n10w', name:'한방 모기기피제', category:'식품/건강', cat:'food', emoji:'🌿', trend:'new', change:'NEW', score:'신규 인기', note:'여름 모기 시즌' },
+    ],
+    monthly: [
+      { id:'n1m', name:'에어컨 청소 업체', category:'홈/리빙', cat:'home', emoji:'❄️', trend:'up', change:'+234%', score:'폭발적 증가', note:'에어컨 시즌' },
+      { id:'n2m', name:'선크림 SPF 비교', category:'뷰티/화장품', cat:'beauty', emoji:'☀️', trend:'up', change:'+178%', score:'검색량 최고', note:'여름 자외선' },
+      { id:'n3m', name:'여름 이불 추천', category:'홈/리빙', cat:'home', emoji:'🛌', trend:'up', change:'+145%', score:'검색량↑', note:'계절 전환' },
+      { id:'n4m', name:'아이스아메리카노', category:'식품/건강', cat:'food', emoji:'☕', trend:'up', change:'+89%', score:'관심도↑', note:'홈카페 트렌드' },
+      { id:'n5m', name:'여름 축제 옷차림', category:'패션/의류', cat:'fashion', emoji:'🎆', trend:'up', change:'+120%', score:'검색량 급증', note:'여름 이벤트' },
+      { id:'n6m', name:'영유아 모자 UV', category:'유아동', cat:'kids', emoji:'👒', trend:'up', change:'+98%', score:'검색량↑', note:'아이 자외선 케어' },
+      { id:'n7m', name:'반려견 더위 해소', category:'반려동물', cat:'pet', emoji:'🌡️', trend:'up', change:'+156%', score:'폭발적 증가', note:'폭염 반려동물' },
+      { id:'n8m', name:'블루투스 스피커', category:'디지털/가전', cat:'digital', emoji:'🔊', trend:'up', change:'+67%', score:'검색량↑', note:'야외 활동 증가' },
+      { id:'n9m', name:'린넨 커튼 DIY', category:'홈/리빙', cat:'home', emoji:'🪟', trend:'new', change:'NEW', score:'신규 인기', note:'홈인테리어 트렌드' },
+      { id:'n10m', name:'발 각질제거', category:'뷰티/화장품', cat:'beauty', emoji:'🦶', trend:'up', change:'+78%', score:'검색량↑', note:'여름 샌들 시즌' },
+    ],
+    yearly: [
+      { id:'n1y', name:'부동산 투자', category:'기타', cat:'home', emoji:'🏠', trend:'up', change:'+89%', score:'연간 최고 검색', note:'부동산 관심 지속' },
+      { id:'n2y', name:'AI 관련 도서', category:'디지털/가전', cat:'digital', emoji:'📚', trend:'up', change:'+234%', score:'폭발적', note:'AI 트렌드' },
+      { id:'n3y', name:'간헐적 단식', category:'식품/건강', cat:'food', emoji:'⏱️', trend:'up', change:'+156%', score:'검색량 최고', note:'건강 다이어트' },
+      { id:'n4y', name:'제로슈거 음료', category:'식품/건강', cat:'food', emoji:'🧃', trend:'up', change:'+189%', score:'폭발적', note:'제로칼로리 트렌드' },
+      { id:'n5y', name:'미니멀 패션', category:'패션/의류', cat:'fashion', emoji:'🤍', trend:'up', change:'+78%', score:'검색량↑', note:'심플 라이프' },
+      { id:'n6y', name:'친환경 제품', category:'홈/리빙', cat:'home', emoji:'♻️', trend:'up', change:'+112%', score:'검색량↑', note:'ESG 소비 확산' },
+      { id:'n7y', name:'펫 프리미엄 사료', category:'반려동물', cat:'pet', emoji:'🐾', trend:'up', change:'+98%', score:'검색량↑', note:'반려동물 프리미엄화' },
+      { id:'n8y', name:'홈트레이닝 용품', category:'홈/리빙', cat:'home', emoji:'🏋️', trend:'up', change:'+145%', score:'검색량 최고', note:'홈짐 트렌드' },
+      { id:'n9y', name:'영어 학습 앱', category:'디지털/가전', cat:'digital', emoji:'📱', trend:'new', change:'NEW', score:'신규 관심', note:'자기계발 트렌드' },
+      { id:'n10y', name:'항산화 식품', category:'식품/건강', cat:'food', emoji:'🫐', trend:'up', change:'+67%', score:'검색량↑', note:'항노화 관심' },
+    ]
+  },
+  instagram: {
+    daily: [
+      { id:'i1', name:'#오트밀볼 레시피', category:'식품/건강', cat:'food', emoji:'🥣', trend:'up', change:'+3.2만', score:'좋아요 급증', note:'건강 아침식사' },
+      { id:'i2', name:'#여름네일아트', category:'뷰티/화장품', cat:'beauty', emoji:'💅', trend:'up', change:'+1.8만', score:'릴스 바이럴', note:'여름 뷰티 트렌드' },
+      { id:'i3', name:'#오늘뭐입지', category:'패션/의류', cat:'fashion', emoji:'👗', trend:'up', change:'+2.4만', score:'해시태그↑', note:'데일리 룩 공유' },
+      { id:'i4', name:'#냉장고파먹기', category:'식품/건강', cat:'food', emoji:'🥬', trend:'new', change:'NEW', score:'신규 바이럴', note:'절약 요리 트렌드' },
+      { id:'i5', name:'#북유럽인테리어', category:'홈/리빙', cat:'home', emoji:'🪴', trend:'up', change:'+1.1만', score:'피드 트렌드', note:'홈데코 관심' },
+      { id:'i6', name:'#고양이일상', category:'반려동물', cat:'pet', emoji:'😸', trend:'same', change:'=', score:'꾸준 인기', note:'펫스타그램' },
+      { id:'i7', name:'#갓생루틴', category:'식품/건강', cat:'food', emoji:'⏰', trend:'up', change:'+2.9만', score:'릴스 조회수↑', note:'자기관리 트렌드' },
+      { id:'i8', name:'#피부관리루틴', category:'뷰티/화장품', cat:'beauty', emoji:'✨', trend:'up', change:'+1.5만', score:'피드 확산', note:'스킨케어 트렌드' },
+      { id:'i9', name:'#아이방꾸미기', category:'유아동', cat:'kids', emoji:'🧸', trend:'up', change:'+0.8만', score:'저장수↑', note:'인테리어 육아' },
+      { id:'i10', name:'#친환경제품', category:'홈/리빙', cat:'home', emoji:'🌱', trend:'up', change:'+1.3만', score:'해시태그↑', note:'에코 소비 문화' },
+    ],
+    weekly: [
+      { id:'i1w', name:'#여름휴가룩', category:'패션/의류', cat:'fashion', emoji:'🌊', trend:'up', change:'+12.4만', score:'주간 폭발', note:'바캉스 시즌' },
+      { id:'i2w', name:'#수영장스타그램', category:'패션/의류', cat:'fashion', emoji:'🏊', trend:'up', change:'+8.7만', score:'릴스 바이럴', note:'여름 레저' },
+      { id:'i3w', name:'#키토식단', category:'식품/건강', cat:'food', emoji:'🥑', trend:'new', change:'NEW', score:'신규 트렌드', note:'저탄고지 유행' },
+      { id:'i4w', name:'#샌달코디', category:'패션/의류', cat:'fashion', emoji:'👡', trend:'up', change:'+5.2만', score:'피드 확산', note:'여름 신발 트렌드' },
+      { id:'i5w', name:'#집사생활', category:'반려동물', cat:'pet', emoji:'🐱', trend:'up', change:'+3.8만', score:'해시태그↑', note:'고양이 집사들' },
+      { id:'i6w', name:'#오가닉육아', category:'유아동', cat:'kids', emoji:'🌿', trend:'up', change:'+2.1만', score:'저장수↑', note:'유기농 육아 트렌드' },
+      { id:'i7w', name:'#홈바만들기', category:'홈/리빙', cat:'home', emoji:'🍹', trend:'new', change:'NEW', score:'신규 바이럴', note:'홈파티 트렌드' },
+      { id:'i8w', name:'#썬쿠션추천', category:'뷰티/화장품', cat:'beauty', emoji:'☀️', trend:'up', change:'+4.6만', score:'릴스 확산', note:'여름 뷰티' },
+      { id:'i9w', name:'#러닝크루', category:'식품/건강', cat:'food', emoji:'🏃', trend:'up', change:'+6.9만', score:'커뮤니티↑', note:'러닝 문화 확산' },
+      { id:'i10w', name:'#미니멀라이프', category:'홈/리빙', cat:'home', emoji:'🤍', trend:'up', change:'+3.3만', score:'피드 트렌드', note:'심플 라이프 스타일' },
+    ],
+    monthly: [
+      { id:'i1m', name:'#6월여행', category:'홈/리빙', cat:'home', emoji:'✈️', trend:'up', change:'+45만', score:'월간 폭발', note:'여름 여행 시즌' },
+      { id:'i2m', name:'#바디포지티브', category:'패션/의류', cat:'fashion', emoji:'💪', trend:'up', change:'+28만', score:'릴스 폭발', note:'자기 사랑 트렌드' },
+      { id:'i3m', name:'#그린스무디', category:'식품/건강', cat:'food', emoji:'🥤', trend:'up', change:'+19만', score:'조회수↑', note:'건강 음료 트렌드' },
+      { id:'i4m', name:'#나혼자캠핑', category:'홈/리빙', cat:'home', emoji:'⛺', trend:'up', change:'+22만', score:'해시태그↑', note:'혼캠 문화' },
+      { id:'i5m', name:'#린넨패션', category:'패션/의류', cat:'fashion', emoji:'🌾', trend:'up', change:'+16만', score:'피드 확산', note:'여름 소재 트렌드' },
+      { id:'i6m', name:'#육아브이로그', category:'유아동', cat:'kids', emoji:'👶', trend:'up', change:'+11만', score:'저장수↑', note:'육아 콘텐츠 인기' },
+      { id:'i7m', name:'#반려견여행', category:'반려동물', cat:'pet', emoji:'🐕', trend:'new', change:'NEW', score:'신규 폭발', note:'펫투어리즘' },
+      { id:'i8m', name:'#선케어루틴', category:'뷰티/화장품', cat:'beauty', emoji:'🧴', trend:'up', change:'+14만', score:'릴스 확산', note:'여름 피부 관리' },
+      { id:'i9m', name:'#갓생챌린지', category:'식품/건강', cat:'food', emoji:'🏆', trend:'up', change:'+33만', score:'챌린지 바이럴', note:'자기계발 챌린지' },
+      { id:'i10m', name:'#빈티지홈데코', category:'홈/리빙', cat:'home', emoji:'🪴', trend:'up', change:'+9만', score:'피드 트렌드', note:'레트로 인테리어' },
+    ],
+    yearly: [
+      { id:'i1y', name:'#오운완', category:'식품/건강', cat:'food', emoji:'💪', trend:'up', change:'+890만', score:'연간 메가 트렌드', note:'오늘 운동 완료 문화' },
+      { id:'i2y', name:'#스몰럭셔리', category:'패션/의류', cat:'fashion', emoji:'✨', trend:'up', change:'+560만', score:'연간 트렌드', note:'소확행 소비' },
+      { id:'i3y', name:'#제로웨이스트', category:'홈/리빙', cat:'home', emoji:'♻️', trend:'up', change:'+430만', score:'가치소비 확산', note:'환경 소비 문화' },
+      { id:'i4y', name:'#홈카페', category:'식품/건강', cat:'food', emoji:'☕', trend:'up', change:'+780만', score:'메가 트렌드', note:'홈카페 문화 정착' },
+      { id:'i5y', name:'#퍼스널컬러', category:'뷰티/화장품', cat:'beauty', emoji:'🎨', trend:'up', change:'+650만', score:'뷰티 트렌드', note:'개인 맞춤 뷰티' },
+      { id:'i6y', name:'#강아지맞이', category:'반려동물', cat:'pet', emoji:'🐾', trend:'up', change:'+320만', score:'펫 트렌드', note:'반려동물 가족화' },
+      { id:'i7y', name:'#키즈카페투어', category:'유아동', cat:'kids', emoji:'🎠', trend:'up', change:'+280만', score:'육아 트렌드', note:'체험형 육아 문화' },
+      { id:'i8y', name:'#재테크공부', category:'디지털/가전', cat:'digital', emoji:'📊', trend:'new', change:'NEW', score:'신규 메가 트렌드', note:'경제 교육 관심' },
+      { id:'i9y', name:'#극한도전', category:'식품/건강', cat:'food', emoji:'🏔️', trend:'up', change:'+210만', score:'챌린지 문화', note:'도전 콘텐츠 인기' },
+      { id:'i10y', name:'#나만의공간', category:'홈/리빙', cat:'home', emoji:'🏠', trend:'up', change:'+390만', score:'인테리어 트렌드', note:'자기만의 공간 꾸미기' },
+    ]
+  }
+};
+
+// Keywords per period
+const KEYWORDS = {
+  daily: [
+    { text:'장마', size:4 }, { text:'제습', size:3 }, { text:'냉감', size:4 }, { text:'선크림', size:3 },
+    { text:'오트밀', size:2 }, { text:'수박', size:3 }, { text:'아이스', size:4 }, { text:'캠핑', size:3 },
+    { text:'다이어트', size:2 }, { text:'원피스', size:3 }, { text:'물놀이', size:4 }, { text:'냉면', size:2 },
+    { text:'모기', size:1 }, { text:'제로칼로리', size:2 }, { text:'갓생', size:3 }
+  ],
+  weekly: [
+    { text:'여름휴가', size:4 }, { text:'수영복', size:4 }, { text:'바베큐', size:3 }, { text:'선케어', size:3 },
+    { text:'홈파티', size:3 }, { text:'린넨', size:2 }, { text:'탈색', size:2 }, { text:'러닝', size:3 },
+    { text:'캠핑', size:4 }, { text:'냉장고정리', size:2 }, { text:'키토', size:1 }, { text:'미니멀', size:2 }
+  ],
+  monthly: [
+    { text:'에어컨', size:4 }, { text:'여름여행', size:4 }, { text:'바캉스', size:3 }, { text:'자외선차단', size:4 },
+    { text:'홈트', size:3 }, { text:'건강식', size:3 }, { text:'반려동물', size:2 }, { text:'인테리어', size:3 },
+    { text:'이유식', size:2 }, { text:'발각질', size:1 }, { text:'여름이불', size:2 }, { text:'헬스', size:3 }
+  ],
+  yearly: [
+    { text:'제로웨이스트', size:4 }, { text:'오운완', size:4 }, { text:'홈카페', size:4 }, { text:'퍼스널컬러', size:3 },
+    { text:'AI', size:4 }, { text:'제로슈거', size:3 }, { text:'친환경', size:3 }, { text:'펫프리미엄', size:2 },
+    { text:'스몰럭셔리', size:3 }, { text:'갓생', size:4 }, { text:'재테크', size:2 }, { text:'미니멀', size:3 }
+  ]
+};
+
+// ===== STATE =====
+let currentPeriod = 'daily';
+let currentPlatform = 'all';
+let currentCategory = 'all';
+let selectedItems = {};
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', () => {
+  setDateBadge();
+  render();
+});
+
+function setDateBadge() {
+  const now = new Date();
+  const options = { year:'numeric', month:'long', day:'numeric', weekday:'short' };
+  document.getElementById('currentDate').textContent = now.toLocaleDateString('ko-KR', options);
+}
+
+function setPeriod(p, btn) {
+  currentPeriod = p;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function setPlatform(p, btn) {
+  currentPlatform = p;
+  document.querySelectorAll('.platform-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function setCategory(c, btn) {
+  currentCategory = c;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function getFilteredData(platform) {
+  const raw = MOCK_DATA[platform][currentPeriod] || [];
+  if (currentCategory === 'all') return raw;
+  return raw.filter(i => i.cat === currentCategory);
+}
+
+// ===== RENDER =====
+function render() {
+  const dashboard = document.getElementById('dashboard');
+  const platforms = currentPlatform === 'all' ? ['coupang','naver','instagram'] : [currentPlatform];
+
+  let html = '';
+
+  // Keywords panel
+  html += `<div class="trend-panel" style="grid-column: span ${currentPlatform === 'all' ? '3' : '1'}; ${currentPlatform !== 'all' ? 'display:none;' : ''}">
+    <div class="panel-header">
+      <div class="panel-title">🔥 핫 키워드 (${periodLabel()})</div>
+      <div style="font-size:12px; color:var(--sub)">클릭하여 상품 검색</div>
+    </div>
+    <div class="keyword-cloud">
+      ${(KEYWORDS[currentPeriod]||[]).map(k => `<span class="keyword-tag kw-size-${k.size}" onclick="showToast('\"${k.text}\" 키워드로 검색합니다')">${k.text}</span>`).join('')}
+    </div>
+  </div>`;
+
+  // Platform panels
+  for (const p of platforms) {
+    const data = getFilteredData(p);
+    const platLabel = { coupang:'쿠팡', naver:'네이버 쇼핑', instagram:'인스타그램' }[p];
+    const badgeClass = `badge-${p}`;
+
+    html += `<div class="trend-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-platform-badge ${badgeClass}">${platLabel}</span>
+          ${periodLabel()} 트렌드 TOP ${data.length}
+        </div>
+        <button class="refresh-btn" onclick="showToast('${platLabel} 데이터를 새로고침했습니다')">↻ 새로고침</button>
+      </div>
+      <div class="trend-list">`;
+
+    if (data.length === 0) {
+      html += `<div class="empty-state"><div class="icon">🔍</div><p>해당 카테고리의 트렌드가 없습니다</p></div>`;
+    } else {
+      data.forEach((item, idx) => {
+        const rank = idx + 1;
+        const isSelected = !!selectedItems[item.id];
+        html += `
+          <div class="trend-item ${isSelected ? 'selected' : ''}" data-id="${item.id}">
+            <div class="rank ${rank <= 3 ? 'top3' : ''}">${rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : rank}</div>
+            <div class="item-emoji">${item.emoji}</div>
+            <div class="item-info">
+              <div class="item-name">${item.name}</div>
+              <div class="item-category">${item.category} · ${item.note}</div>
+            </div>
+            <div class="item-trend">
+              <span class="trend-change ${item.trend}">${item.change}</span>
+              <span class="trend-score">${item.score}</span>
+            </div>
+            <button class="select-btn ${isSelected ? 'selected' : ''}" onclick="toggleSelect('${item.id}', '${p}', ${JSON.stringify(item).replace(/'/g,"&#39;")})" title="${isSelected ? '선별 해제' : '상품 선별'}">
+              ${isSelected ? '✓' : '+'}
+            </button>
+          </div>`;
+      });
+    }
+
+    html += `</div></div>`;
+  }
+
+  // Platform trend bar (only in 'all' mode)
+  if (currentPlatform === 'all') {
+    html += `<div class="trend-panel" style="grid-column: span 3">
+      <div class="panel-header">
+        <div class="panel-title">📊 플랫폼별 트렌드 강도 (${periodLabel()})</div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-bar-row">
+          <div class="chart-label">쿠팡</div>
+          <div class="chart-bar-wrap"><div class="chart-bar coupang" style="width:85%"><span>85</span></div></div>
+        </div>
+        <div class="chart-bar-row">
+          <div class="chart-label">네이버</div>
+          <div class="chart-bar-wrap"><div class="chart-bar naver" style="width:92%"><span>92</span></div></div>
+        </div>
+        <div class="chart-bar-row">
+          <div class="chart-label">인스타그램</div>
+          <div class="chart-bar-wrap"><div class="chart-bar instagram" style="width:78%"><span>78</span></div></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  dashboard.innerHTML = html;
+  updateSummary();
+}
+
+function periodLabel() {
+  return { daily:'일간', weekly:'주간', monthly:'월간', yearly:'연간' }[currentPeriod];
+}
+
+function toggleSelect(id, platform, item) {
+  if (selectedItems[id]) {
+    delete selectedItems[id];
+    showToast(`"${item.name}" 선별 해제`);
+  } else {
+    selectedItems[id] = { ...item, platform };
+    showToast(`"${item.name}" 선별 목록에 추가됨 ✓`);
+  }
+  updateBadge();
+  render();
+  if (document.getElementById('drawer').classList.contains('open')) {
+    renderDrawer();
+  }
+}
+
+function updateBadge() {
+  const count = Object.keys(selectedItems).length;
+  document.getElementById('selectedCountBadge').textContent = count;
+  document.getElementById('summarySelected').textContent = count;
+}
+
+function updateSummary() {
+  const summaryData = {
+    daily: { keywords:'127', keyChange:'▲ 전일 대비 +12%', newItems:'34', newChange:'▲ +8개 신규', cat:'식품/건강', catChange:'▲ +28% 상승' },
+    weekly: { keywords:'489', keyChange:'▲ 전주 대비 +8%', newItems:'112', newChange:'▲ +23개 신규', cat:'패션/의류', catChange:'▲ +41% 상승' },
+    monthly: { keywords:'1,823', keyChange:'▲ 전월 대비 +19%', newItems:'378', newChange:'▲ +67개 신규', cat:'홈/리빙', catChange:'▲ +55% 상승' },
+    yearly: { keywords:'18,430', keyChange:'▲ 전년 대비 +32%', newItems:'2,140', newChange:'▲ +890개 신규', cat:'식품/건강', catChange:'▲ +78% 상승' },
+  };
+  const d = summaryData[currentPeriod];
+  document.getElementById('summaryKeywords').textContent = d.keywords;
+  document.getElementById('summaryKeywordsChange').textContent = d.keyChange;
+  document.getElementById('summaryNew').textContent = d.newItems;
+  document.getElementById('summaryNewChange').textContent = d.newChange;
+  document.getElementById('summaryCategory').textContent = d.cat;
+  document.getElementById('summaryCategoryChange').textContent = d.catChange;
+}
+
+// ===== DRAWER =====
+function openDrawer() {
+  renderDrawer();
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+function renderDrawer() {
+  const body = document.getElementById('drawerBody');
+  const items = Object.values(selectedItems);
+  if (items.length === 0) {
+    body.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>아직 선별한 상품이 없습니다<br>트렌드 목록에서 + 버튼을 눌러<br>상품을 선별해보세요</p></div>`;
+    return;
+  }
+  const platLabels = { coupang:'쿠팡', naver:'네이버', instagram:'인스타그램' };
+  let html = `<div class="section-title">선별 상품 (${items.length}개)</div>`;
+  html += items.map(item => `
+    <div class="selected-item">
+      <div class="item-emoji">${item.emoji}</div>
+      <div class="info">
+        <div class="name">${item.name}</div>
+        <div class="meta">${platLabels[item.platform]} · ${item.category} · ${item.change}</div>
+      </div>
+      <button class="remove-btn" onclick="toggleSelect('${item.id}', '${item.platform}', ${JSON.stringify(item).replace(/'/g,"&#39;")})">✕</button>
+    </div>`).join('');
+  html += `<span class="note-label">📝 오늘의 메모</span>`;
+  html += `<textarea class="note-area" id="selectionNote" placeholder="선별 이유, 발주 수량, 특이사항 등을 메모하세요...">${window._savedNote||''}</textarea>`;
+  body.innerHTML = html;
+}
+
+function clearSelected() {
+  selectedItems = {};
+  updateBadge();
+  render();
+  renderDrawer();
+  showToast('선별 목록을 초기화했습니다');
+}
+
+function exportList() {
+  const items = Object.values(selectedItems);
+  const note = document.getElementById('selectionNote')?.value || '';
+  window._savedNote = note;
+  if (items.length === 0) { showToast('선별된 상품이 없습니다'); return; }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('ko-KR');
+  const platLabels = { coupang:'쿠팡', naver:'네이버', instagram:'인스타그램' };
+
+  let text = `📋 감자마켓 상품 선별 목록\n`;
+  text += `📅 ${dateStr} | 기간: ${periodLabel()}\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  items.forEach((item, i) => {
+    text += `${i+1}. ${item.name}\n   플랫폼: ${platLabels[item.platform]} | 카테고리: ${item.category}\n   트렌드: ${item.change} | 점수: ${item.score}\n   비고: ${item.note}\n\n`;
+  });
+  if (note) { text += `━━━━━━━━━━━━━━━━━━━━━\n📝 메모:\n${note}\n`; }
+
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `감자마켓_선별목록_${now.toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('선별 목록을 내보냈습니다 📤');
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
