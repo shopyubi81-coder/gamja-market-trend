@@ -72,7 +72,7 @@ const stripTags = (s: string) =>
 async function naverCategoryTrend(period: string) {
   const { startDate, endDate } = periodDates(period);
   const timeUnit = period === "daily" ? "date" : period === "weekly" ? "week" : "month";
-  const chunks: typeof NAVER_CATEGORIES[] = [];
+  const chunks: { name: string; code: string }[][] = [];
   for (let i = 0; i < NAVER_CATEGORIES.length; i += 3) chunks.push(NAVER_CATEGORIES.slice(i, i + 3));
   const results: any[] = [];
   for (const chunk of chunks) {

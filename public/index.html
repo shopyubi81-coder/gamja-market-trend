@@ -641,6 +641,12 @@ const SUPA_OK = cfgValid(CFG.SUPABASE_URL) && cfgValid(CFG.SUPABASE_ANON_KEY);
 // API 베이스: Supabase 설정 시 Edge Function, 아니면 로컬 Express(/api)
 const API_BASE = SUPA_OK ? `${CFG.SUPABASE_URL}/functions/v1/market-api` : '';
 const api = (path) => API_BASE + path;
+// Edge Function 호출 시 익명 키 인증 헤더 자동 첨부
+function afetch(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (SUPA_OK) { headers['apikey'] = CFG.SUPABASE_ANON_KEY; headers['Authorization'] = `Bearer ${CFG.SUPABASE_ANON_KEY}`; }
+  return fetch(api(path), { ...opts, headers });
+}
 // Supabase 클라이언트 (선별목록 DB 동기화용)
 const sb = (SUPA_OK && window.supabase) ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
 const DEVICE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? '📱 모바일' : '💻 PC';
@@ -696,7 +702,7 @@ async function dbDeleteSelection(id) {
 
 async function checkStatus() {
   try {
-    const res = await fetch(api('/api/status'));
+    const res = await afetch('/api/status');
     const data = await res.json();
     isNaverConfigured = data.naverConfigured;
     isSheetsConfigured = data.sheetsConfigured;
@@ -722,7 +728,7 @@ async function loadNaverData(period, btn) {
   if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
   try {
     // 1) 카테고리 트렌드 지수
-    const res = await fetch(api(`/api/naver/categories?period=${period}`));
+    const res = await afetch(`/api/naver/categories?period=${period}`);
     const json = await res.json();
     if (json.success) {
       naverLiveData = json.data;
@@ -737,7 +743,7 @@ async function loadNaverData(period, btn) {
     if (currentCategory !== 'all' && catMap[currentCategory]) {
       url += `?category=${encodeURIComponent(catMap[currentCategory])}&perKeyword=5`;
     }
-    const pr = await fetch(api(url));
+    const pr = await afetch(url);
     const pj = await pr.json();
     if (pj.success) {
       naverProducts = pj.data;
@@ -750,6 +756,28 @@ async function loadNaverData(period, btn) {
     if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
   }
   render();
+}
+
+// 네이버 카테고리 막대 클릭 → 그 카테고리 실제 상품 TOP 20
+async function loadCategoryProducts(catName) {
+  if (!isNaverConfigured) { showToast('네이버 API 미연결'); return; }
+  showToast(`"${catName}" 상품 TOP 20 조회중...`);
+  try {
+    const r = await afetch(`/api/naver/products?category=${encodeURIComponent(catName)}&perKeyword=5`);
+    const j = await r.json();
+    if (j.success) {
+      naverProducts = j.data;
+      // 필터를 전체로 맞춰 클릭한 카테고리 상품이 모두 보이게
+      currentCategory = 'all';
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      const allBtn = document.querySelector('.cat-btn'); if (allBtn) allBtn.classList.add('active');
+      const cnt = j.data.reduce((s,g)=>s+g.items.length,0);
+      render();
+      showToast(`"${catName}" TOP ${cnt} 상품 표시 ✓`);
+    } else {
+      showToast('조회 실패: ' + (j.message||j.error));
+    }
+  } catch (e) { showToast('조회 실패: ' + e.message); }
 }
 
 // ===== CONTROLS =====
@@ -814,7 +842,7 @@ async function loadAliData(btn) {
     const kwMap = { food:'간식', beauty:'화장품', fashion:'여름옷', home:'주방용품', kids:'유아용품', pet:'반려동물', digital:'가성비가전' };
     let url = '/api/ali/hotproducts?pageSize=20';
     if (currentCategory !== 'all' && kwMap[currentCategory]) url += `&keyword=${encodeURIComponent(kwMap[currentCategory])}`;
-    const res = await fetch(api(url));
+    const res = await afetch(url);
     const json = await res.json();
     if (json.success) {
       aliLiveData = json.data;
@@ -835,7 +863,7 @@ async function searchKeyword(kw) {
   if (!isNaverConfigured) { showToast(`"${kw}" 키워드 (네이버 미연결)`); return; }
   showToast(`"${kw}" 상품 검색 중...`);
   try {
-    const r = await fetch(api(`/api/naver/search?q=${encodeURIComponent(kw)}&display=12`));
+    const r = await afetch(`/api/naver/search?q=${encodeURIComponent(kw)}&display=12`);
     const j = await r.json();
     if (j.success) {
       const grp = { category: `🔍 "${kw}" 검색`, searchKeyword: kw, isSearch: true,
@@ -957,11 +985,12 @@ function renderNaverPanel(periodLabel) {
     </div>`;
 
   if (haslive) {
+    html += `<div style="padding:8px 20px 0; font-size:11px; color:var(--sub)">👇 카테고리를 누르면 그 분야 실제 상품 TOP 20을 불러옵니다</div>`;
     html += `<div class="naver-chart">`;
     data.forEach(item => {
       const pct = Math.round((parseFloat(item.ratio) / maxRatio) * 100);
       const changeStr = item.change > 0 ? `+${item.change}%` : item.change < 0 ? `${item.change}%` : '=';
-      html += `<div class="chart-bar-row" onclick="showToast('${item.name}: 트렌드 지수 ${item.ratio}')">
+      html += `<div class="chart-bar-row" onclick="loadCategoryProducts('${item.name}')" title="${item.name} TOP 20 상품 보기">
         <div class="chart-label">${item.name}</div>
         <div class="chart-bar-wrap"><div class="chart-bar" style="width:${pct}%"><span>${item.ratio}</span></div></div>
         <div class="chart-change ${item.trend}">${changeStr}</div>
@@ -1289,7 +1318,7 @@ async function saveToSheets() {
   btn.disabled = true; btn.textContent = '저장 중...';
   const resultEl = document.getElementById('sheetsResult');
   try {
-    const res = await fetch(api('/api/sheets/save'), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const res = await afetch('/api/sheets/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const data = await res.json();
     if (data.success) {
       if (resultEl) resultEl.innerHTML = `<div class="sheets-result success">✅ Google Sheets에 저장 완료!</div>`;
