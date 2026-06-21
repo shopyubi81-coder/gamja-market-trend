@@ -222,47 +222,65 @@
 
   .last-fetch { font-size: 11px; color: var(--sub); margin-top: 4px; }
 
+  .logo-long, .badge-long { } /* 기본은 표시, 모바일에서 숨김 */
+
   /* drawer 기본 너비를 화면보다 크지 않게 */
   .drawer { width: min(520px, 100vw); right: calc(-1 * min(520px, 100vw)); }
 
-  /* ===================== 모바일 반응형 ===================== */
+  /* 부드러운 가로 스크롤 (필터바 공통) */
+  .period-bar, .platform-tabs, .category-filter { scroll-snap-type: x proximity; }
+
+  /* ===================== 태블릿 (≤1024px) ===================== */
+  @media (max-width: 1024px) {
+    .container { padding: 20px; }
+    .summary-row { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  }
+
+  /* ===================== 모바일 (≤768px) ===================== */
   @media (max-width: 768px) {
     header { padding: 0 14px; height: 54px; }
-    .logo { font-size: 15px; gap: 7px; }
-    .logo-icon { width: 28px; height: 28px; font-size: 16px; }
-    .header-right { gap: 7px; }
-    .date-badge { display: none; }              /* 좁은 화면에선 날짜 숨김 */
-    .api-status { font-size: 10px; padding: 3px 7px; }
-    .selected-count-badge { font-size: 12px; padding: 5px 10px; }
+    .logo { font-size: 16px; gap: 7px; min-width: 0; }
+    .logo-icon { width: 28px; height: 28px; font-size: 16px; flex-shrink: 0; }
+    .header-right { gap: 6px; }
+    .date-badge { display: none; }                 /* 날짜는 숨김 */
+    .api-status { font-size: 10px; padding: 3px 8px; white-space: nowrap; }
+    .selected-count-badge { font-size: 13px; padding: 6px 11px; white-space: nowrap; }
 
     .container { padding: 14px; }
+    .alert-banner { font-size: 12px; padding: 10px 12px; }
 
-    /* 가로 스크롤 가능한 필터바 (버튼 잘림 방지) */
+    /* 가로 스크롤 필터바 — 버튼 잘림 방지 + 스냅 */
     .period-bar, .platform-tabs, .category-filter {
       flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-      padding-bottom: 4px; scrollbar-width: none;
+      padding-bottom: 6px; margin-bottom: 14px; scrollbar-width: none;
     }
     .period-bar::-webkit-scrollbar, .platform-tabs::-webkit-scrollbar, .category-filter::-webkit-scrollbar { display: none; }
     .platform-tabs { width: 100%; }
-    .period-btn, .platform-tab, .cat-btn { flex: 0 0 auto; }
-    .period-btn { padding: 8px 16px; font-size: 13px; }
-    .platform-tab { padding: 9px 16px; font-size: 13px; }
+    .period-btn, .platform-tab, .cat-btn { flex: 0 0 auto; scroll-snap-align: start; }
+    .period-label { flex-shrink: 0; }
+    .period-btn { padding: 9px 18px; font-size: 14px; }   /* 터치 영역 ↑ */
+    .platform-tab { padding: 10px 16px; font-size: 13px; }
+    .cat-btn { padding: 7px 14px; font-size: 13px; }
 
     /* 요약 카드 2열 */
-    .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
     .summary-card { padding: 14px; }
     .summary-card .value { font-size: 20px; }
 
     /* 패널 1열 */
     .dashboard { grid-template-columns: 1fr !important; gap: 14px; }
     .trend-panel[style*="span 3"], .trend-panel[style*="span 2"] { grid-column: span 1 !important; }
+    .panel-header { padding: 14px 16px; }
+    .panel-title { font-size: 14px; }
 
-    /* 상품 카드 터치 친화적으로 */
-    .trend-item { padding: 12px 14px; }
-    .item-emoji { width: 44px; height: 44px; }
-    .item-name { font-size: 14px; white-space: normal; }   /* 모바일은 상품명 줄바꿈 허용 */
+    /* 상품 카드 — 터치 친화적 */
+    .trend-list { padding: 10px; gap: 9px; }
+    .trend-item { padding: 13px; }
+    .item-emoji { width: 46px; height: 46px; }
+    .item-name { font-size: 14px; white-space: normal; word-break: break-word; }
     .item-details { grid-template-columns: 1fr 1fr; }
-    .select-btn { min-height: 36px; padding: 0 12px; }
+    .select-btn { min-height: 38px; padding: 8px 16px; }
+    .chart-label { width: 76px; }
 
     /* drawer 전체 화면 */
     .drawer { width: 100vw; right: -100vw; }
@@ -270,15 +288,22 @@
     .drawer-footer { flex-direction: column; }
     .drawer-footer .btn-primary, .drawer-footer .btn-outline { width: 100%; }
 
-    /* 모달 */
     .modal { padding: 20px; max-height: 88vh; }
     .toast { width: max-content; max-width: 90vw; white-space: normal; text-align: center; }
   }
 
-  @media (max-width: 420px) {
-    .summary-row { grid-template-columns: 1fr 1fr; }
-    .logo { font-size: 14px; }
-    .item-details { grid-template-columns: 1fr; }
+  /* ===================== 작은 폰 (≤430px) ===================== */
+  @media (max-width: 430px) {
+    .logo-long, .badge-long { display: none; }     /* "감자마켓"·"📋 N"만 표시 */
+    .logo { font-size: 17px; }
+    .item-details { grid-template-columns: 1fr; }   /* 상세칩 1열 */
+    .summary-card .label { font-size: 11px; }
+    .summary-card .value { font-size: 19px; }
+  }
+
+  /* ===================== 아주 작은 폰 (≤360px) ===================== */
+  @media (max-width: 360px) {
+    .summary-row { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -288,13 +313,13 @@
 <header>
   <div class="logo">
     <div class="logo-icon">🥔</div>
-    감자마켓 트렌드 대시보드
+    <span>감자마켓<span class="logo-long"> 트렌드 대시보드</span></span>
   </div>
   <div class="header-right">
     <span class="api-status warn" id="apiStatusBadge">⚙️ 설정 필요</span>
     <div class="date-badge" id="currentDate"></div>
     <div class="selected-count-badge" onclick="openDrawer()">
-      📋 선별 목록 <span id="selectedCountBadge">0</span>개
+      📋<span class="badge-long"> 선별 목록</span> <span id="selectedCountBadge">0</span><span class="badge-long">개</span>
     </div>
   </div>
 </header>
