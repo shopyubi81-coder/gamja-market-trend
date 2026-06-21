@@ -1,16 +1,17 @@
 // ================================================
-// 감자마켓 대시보드 설정 (이 파일만 수정하면 됩니다)
+// 감자마켓 대시보드 설정
 // ================================================
-// Supabase 대시보드 → Project Settings → API 에서 값을 복사하세요.
-//   - Project URL          → SUPABASE_URL
-//   - Project API keys(anon, public) → SUPABASE_ANON_KEY
+// Supabase 대시보드 → Project Settings → API Keys 에서 값 복사.
+//   - Project URL                → SUPABASE_URL
+//   - Publishable key (anon 공개키) → SUPABASE_ANON_KEY
+// publishable 키는 공개돼도 안전합니다(RLS 보호). GitHub에 올라가도 OK.
 //
-// anon 키는 공개돼도 안전한 키입니다(RLS로 보호). GitHub에 올라가도 OK.
+// EDGE_FUNCTION: 배포한 Edge Function 경로.
+//   함수 이름이 'dynamic-action'으로 배포돼서, 내부 라우팅 보정을 위해
+//   'dynamic-action/market-api' 형태로 둡니다. (함수 코드는 그대로 사용)
 
 window.GAMJA_CONFIG = {
-  // 예: "https://abcdefgh.supabase.co"
-  SUPABASE_URL: "여기에_SUPABASE_URL",
-
-  // 예: "eyJhbGciOi... (anon public 키)"
-  SUPABASE_ANON_KEY: "여기에_ANON_KEY",
+  SUPABASE_URL: "https://xjmktxwnyesxvvigypqj.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_Ow0OEYmKjVHC54phH2ib8g_wD2vY-cr",
+  EDGE_FUNCTION: "dynamic-action/market-api",
 };

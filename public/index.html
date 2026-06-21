@@ -639,7 +639,8 @@ const CFG = window.GAMJA_CONFIG || {};
 const cfgValid = (v) => v && !String(v).startsWith('여기에');
 const SUPA_OK = cfgValid(CFG.SUPABASE_URL) && cfgValid(CFG.SUPABASE_ANON_KEY);
 // API 베이스: Supabase 설정 시 Edge Function, 아니면 로컬 Express(/api)
-const API_BASE = SUPA_OK ? `${CFG.SUPABASE_URL}/functions/v1/market-api` : '';
+const EDGE_FN = CFG.EDGE_FUNCTION || 'market-api';
+const API_BASE = SUPA_OK ? `${CFG.SUPABASE_URL}/functions/v1/${EDGE_FN}` : '';
 const api = (path) => API_BASE + path;
 // Edge Function 호출 시 익명 키 인증 헤더 자동 첨부
 function afetch(path, opts = {}) {
