@@ -491,7 +491,18 @@
     </div>
 
     <div class="setup-step">
-      <div class="step-num">Step 4 — 자동 시작 설정</div>
+      <div class="step-num">Step 4 — 쿠팡 파트너스 (실시간 인기상품)</div>
+      <div class="step-title">🛒 골드박스 · 카테고리 베스트</div>
+      <div class="step-desc">
+        1. 쿠팡 파트너스 → <strong>오픈 API → 키 발급/관리</strong>에서 ACCESS/SECRET 키 발급<br>
+        2. Supabase Secrets에 <code>COUPANG_ACCESS_KEY</code>, <code>COUPANG_SECRET_KEY</code> 입력<br>
+        3. <code>api_cache</code> 테이블 생성(0002 SQL) 후 함수 재배포<br>
+        <span style="color:var(--sub)">※ 쿠팡은 호출 제한이 엄격해 30분 캐싱으로 안전하게 가져옵니다.</span>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">Step 5 — 자동 시작 설정</div>
       <div class="step-title">⏰ 매일 아침 자동 실행</div>
       <div class="step-desc">
         <code>start-auto.bat</code> 파일을 실행하면<br>
@@ -700,6 +711,8 @@ let aliLiveData = null;
 let isNaverConfigured = false;
 let isSheetsConfigured = false;
 let isAliConfigured = false;
+let isCoupangConfigured = false;
+let coupangLiveData = null;
 
 // ===== 환경 설정: 로컬(Express) vs 배포(Supabase) =====
 const CFG = window.GAMJA_CONFIG || {};
@@ -876,6 +889,7 @@ async function checkStatus() {
     isNaverConfigured = data.naverConfigured;
     isSheetsConfigured = data.sheetsConfigured;
     isAliConfigured = data.aliConfigured;
+    isCoupangConfigured = data.coupangConfigured;
 
     document.getElementById('apiStatusBadge').textContent = isNaverConfigured ? '🟢 네이버 연동' : '⚙️ 설정 필요';
     document.getElementById('apiStatusBadge').className = `api-status ${isNaverConfigured ? 'ok' : 'warn'}`;
@@ -969,15 +983,17 @@ function setPlatform(p, btn) {
   btn.classList.add('active');
   render();
   if ((p === 'china' || p === 'all') && isAliConfigured && !aliLiveData) loadAliData(null);
+  if (p === 'coupang' && isCoupangConfigured && !coupangLiveData) loadCoupangData(null);
 }
 function setCategory(c, btn) {
   currentCategory = c;
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   render();
-  // 카테고리 바뀌면 네이버 실제 상품/키워드 재조회
+  // 카테고리 바뀌면 실제 상품 재조회
   if (isNaverConfigured) loadNaverData(currentPeriod, null);
   if (isAliConfigured && (currentPlatform === 'china' || currentPlatform === 'all')) loadAliData(null);
+  if (isCoupangConfigured && currentPlatform === 'coupang') { coupangLiveData = null; loadCoupangData(null); }
 }
 
 // 네이버 실제 상품명에서 인기 키워드 추출
@@ -1021,6 +1037,33 @@ async function loadAliData(btn) {
     }
   } catch (e) {
     showToast('알리 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 쿠팡 실시간 인기 상품 (골드박스 또는 카테고리 베스트, 30분 캐싱)
+async function loadCoupangData(btn) {
+  if (!isCoupangConfigured) { showToast('쿠팡 키를 먼저 설정해주세요 (목업 표시 중)'); openSetupModal(); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    // 카테고리 선택 시 베스트카테고리, 전체면 골드박스
+    const url = currentCategory !== 'all'
+      ? `/api/coupang/best?category=${currentCategory}&limit=20`
+      : '/api/coupang/goldbox';
+    const res = await afetch(url);
+    const json = await res.json();
+    if (json.success) {
+      coupangLiveData = json.data;
+      const src = currentCategory !== 'all' ? `${json.category} 베스트` : '골드박스';
+      const note = json.cached ? `(${json.ageMin}분 전 캐시)` : '(실시간)';
+      showToast(`쿠팡 ${src} ${json.data.length}개 ${note} ✓`);
+    } else {
+      showToast('쿠팡 수집 실패: ' + (json.message || json.error));
+    }
+  } catch (e) {
+    showToast('쿠팡 수집 실패: ' + e.message);
   } finally {
     if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
   }
@@ -1081,6 +1124,7 @@ function render() {
   for (const p of platforms) {
     if (p === 'naver') { html += renderNaverPanel(periodLabel); continue; }
     if (p === 'china') { html += renderChinaPanel(periodLabel); continue; }
+    if (p === 'coupang') { html += renderCoupangPanel(periodLabel); continue; }
     const items = getFilteredItems(MOCK[p]?.[currentPeriod] || []);
     const platLabel = { coupang:'쿠팡', instagram:'인스타그램' }[p];
     const badgeClass = `badge-${p}`;
@@ -1342,6 +1386,71 @@ function renderChinaPanel(periodLabel) {
         <div class="item-footer" style="gap:8px">
           ${item.link?`<a href="${item.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 상품보기</a>`:''}
           <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","china",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
+        </div>
+      </div>`;
+    });
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+function renderCoupangPanel(periodLabel) {
+  const isReal = coupangLiveData && coupangLiveData.length > 0;
+  const items = isReal ? coupangLiveData : getFilteredItems(MOCK.coupang[currentPeriod] || []);
+  const srcLabel = currentCategory !== 'all' ? '카테고리 베스트' : '골드박스 특가';
+
+  let html = `<div class="trend-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="panel-platform-badge badge-coupang">쿠팡</span>
+        ${isReal ? srcLabel : periodLabel+' 트렌드'} ${isReal ? '<span class="live-badge">실시간</span>' : '<span class="mock-badge">목업</span>'}
+      </div>
+      <button class="refresh-btn" onclick="loadCoupangData(this)">↻ 새로고침</button>
+    </div>`;
+
+  if (!isCoupangConfigured && !isReal) {
+    html += `<div style="padding:10px 20px 0; font-size:12px; color:var(--sub)">
+      ⚠️ 목업 데이터 · <a href="#" onclick="openSetupModal(); return false" style="color:var(--primary)">쿠팡 API 연결하기</a> (키 입력 시 실시간 전환)
+    </div>`;
+  }
+
+  html += `<div class="trend-list">`;
+  if (items.length === 0) {
+    html += `<div class="empty-state"><div class="icon">🔍</div><p>해당 카테고리 상품 없음</p></div>`;
+  } else {
+    items.forEach((item, idx) => {
+      const rank = item.rank || (idx + 1);
+      const id = 'cp_' + (item.productId || item.id || rank);
+      const sel = !!selectedItems[id];
+      const sItem = {
+        id, name: item.name, category: item.category, subCategory: item.subCategory || '',
+        cat: item.cat || currentCategory, emoji: item.emoji || '🛒', trend: 'up',
+        change: item.priceText, priceRange: item.priceText,
+        target: '쿠팡' + (item.isRocket ? ' · 로켓배송' : ''),
+        keywords: item.keywords || [], reason: item.reason || '',
+        link: item.link, image: item.image, mallName: '쿠팡', brand: '쿠팡'
+      };
+      const safe = JSON.stringify(sItem).replace(/'/g,"&#39;");
+      html += `<div class="trend-item ${sel?'selected':''}">
+        <div class="item-top">
+          <div class="rank ${rank<=3?'top3':''}">${rank}</div>
+          <div class="item-emoji" style="overflow:hidden;padding:0">${item.image?`<img src="${item.image}" style="width:100%;height:100%;object-fit:cover" />`:item.emoji||'🛒'}</div>
+          <div class="item-main">
+            <div class="item-name">${item.name}</div>
+            <div class="item-sub">
+              <span>🛒 ${item.category||'쿠팡'}</span>
+              ${item.isRocket?`<span class="sep">|</span><span style="color:#00A8E8;font-weight:700">🚀 로켓배송</span>`:''}
+              ${item.isFreeShipping?`<span class="sep">|</span><span>무료배송</span>`:''}
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="trend-change up">${item.priceText}</span>
+          </div>
+        </div>
+        ${item.note?`<div class="item-reason">💡 ${item.note}</div>`:''}
+        <div class="item-footer" style="gap:8px">
+          ${item.link?`<a href="${item.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 상품보기</a>`:''}
+          <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","coupang",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
         </div>
       </div>`;
     });

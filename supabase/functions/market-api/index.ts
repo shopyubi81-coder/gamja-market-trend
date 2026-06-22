@@ -15,6 +15,11 @@ const NAVER_CLIENT_SECRET = Deno.env.get("NAVER_CLIENT_SECRET") ?? "";
 const ALI_APP_KEY = Deno.env.get("ALI_APP_KEY") ?? "";
 const ALI_APP_SECRET = Deno.env.get("ALI_APP_SECRET") ?? "";
 const ALI_TRACKING_ID = Deno.env.get("ALI_TRACKING_ID") ?? "";
+const COUPANG_ACCESS_KEY = Deno.env.get("COUPANG_ACCESS_KEY") ?? "";
+const COUPANG_SECRET_KEY = Deno.env.get("COUPANG_SECRET_KEY") ?? "";
+// Supabase가 Edge Function에 자동 주입하는 값 (캐시 테이블 접근용)
+const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SB_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,6 +32,85 @@ const json = (body: unknown, status = 200) =>
 
 const naverConfigured = () => !!(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
 const aliConfigured = () => !!(ALI_APP_KEY && ALI_APP_SECRET);
+const coupangConfigured = () => !!(COUPANG_ACCESS_KEY && COUPANG_SECRET_KEY);
+
+// ===== Supabase 캐시 (api_cache 테이블) — 쿠팡 호출 한도 보호 =====
+async function cacheGet(key: string, ttlMs: number) {
+  if (!SB_URL || !SB_SERVICE_KEY) return null;
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1/api_cache?key=eq.${encodeURIComponent(key)}&select=data,updated_at`, {
+      headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` },
+    });
+    const rows = await r.json();
+    if (Array.isArray(rows) && rows[0]) {
+      const age = Date.now() - new Date(rows[0].updated_at).getTime();
+      if (age < ttlMs) return { data: rows[0].data, ageMs: age };
+    }
+  } catch (_) { /* 캐시 실패는 무시하고 실시간 호출 */ }
+  return null;
+}
+async function cacheSet(key: string, data: unknown) {
+  if (!SB_URL || !SB_SERVICE_KEY) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/api_cache?on_conflict=key`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}`,
+        "Content-Type": "application/json", Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify({ key, data, updated_at: new Date().toISOString() }),
+    });
+  } catch (_) { /* 무시 */ }
+}
+
+// ===== 쿠팡 파트너스 HMAC(CEA) 서명 =====
+const COUPANG_HOST = "https://api-gateway.coupang.com";
+async function coupangAuth(method: string, urlpath: string, query: string) {
+  // datetime: yyMMdd'T'HHmmss'Z' (GMT)
+  const datetime = new Date().toISOString().slice(2, 19).replace(/[-:]/g, "") + "Z";
+  const message = datetime + method + urlpath + query;
+  const keyData = new TextEncoder().encode(COUPANG_SECRET_KEY);
+  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, new TextEncoder().encode(message));
+  const signature = encodeHex(new Uint8Array(sig));
+  return `CEA algorithm=HmacSHA256, access-key=${COUPANG_ACCESS_KEY}, signed-date=${datetime}, signature=${signature}`;
+}
+
+async function coupangCall(urlpath: string, query = "") {
+  const authorization = await coupangAuth("GET", urlpath, query);
+  const url = COUPANG_HOST + urlpath + (query ? `?${query}` : "");
+  const r = await fetch(url, { method: "GET", headers: { Authorization: authorization, "Content-Type": "application/json" } });
+  const data = await r.json();
+  if (data.rCode && data.rCode !== "0") throw new Error(`Coupang ${data.rCode}: ${data.rMessage}`);
+  return data;
+}
+
+// 우리 카테고리 → 쿠팡 카테고리 ID
+const COUPANG_CATEGORY: Record<string, { id: string; name: string }> = {
+  food:    { id: "1012", name: "식품" },
+  beauty:  { id: "1010", name: "뷰티" },
+  fashion: { id: "1001", name: "여성패션" },
+  home:    { id: "1014", name: "생활용품" },
+  kids:    { id: "1011", name: "출산/유아동" },
+  pet:     { id: "1029", name: "반려동물용품" },
+  digital: { id: "1016", name: "가전디지털" },
+};
+const CPATH = "/v2/providers/affiliate_open_api/apis/openapi/v1/products";
+
+function mapCoupangItem(p: any, catName: string) {
+  return {
+    name: p.productName,
+    price: p.productPrice,
+    priceText: `${Number(p.productPrice || 0).toLocaleString()}원`,
+    image: p.productImage,
+    link: p.productUrl,
+    category: catName || p.categoryName || "쿠팡",
+    isRocket: p.isRocket,
+    isFreeShipping: p.isFreeShipping,
+    rank: p.rank,
+    productId: p.productId,
+  };
+}
 
 // ===== 네이버 공통 =====
 const NAVER_CATEGORIES = [
@@ -143,7 +227,34 @@ Deno.serve(async (req) => {
 
   try {
     if (path === "/api/status") {
-      return json({ naverConfigured: naverConfigured(), aliConfigured: aliConfigured(), serverTime: new Date().toISOString() });
+      return json({ naverConfigured: naverConfigured(), aliConfigured: aliConfigured(), coupangConfigured: coupangConfigured(), serverTime: new Date().toISOString() });
+    }
+
+    // ===== 쿠팡 골드박스 (오늘의 특가/인기) =====
+    if (path === "/api/coupang/goldbox") {
+      if (!coupangConfigured()) return json({ error: "COUPANG_API_NOT_CONFIGURED" }, 503);
+      const cacheKey = "coupang:goldbox";
+      const cached = await cacheGet(cacheKey, 30 * 60 * 1000); // 30분 캐시
+      if (cached) return json({ success: true, cached: true, ageMin: Math.round(cached.ageMs / 60000), data: cached.data });
+      const res = await coupangCall(`${CPATH}/goldbox`);
+      const items = (res.data || []).map((p: any) => mapCoupangItem(p, "")).slice(0, 30);
+      await cacheSet(cacheKey, items);
+      return json({ success: true, cached: false, data: items, fetchedAt: new Date().toISOString() });
+    }
+
+    // ===== 쿠팡 베스트 카테고리 (카테고리별 인기상품) =====
+    if (path === "/api/coupang/best") {
+      if (!coupangConfigured()) return json({ error: "COUPANG_API_NOT_CONFIGURED" }, 503);
+      const catKey = q.get("category") || "food";
+      const cat = COUPANG_CATEGORY[catKey] || COUPANG_CATEGORY.food;
+      const limit = q.get("limit") || "20";
+      const cacheKey = `coupang:best:${cat.id}`;
+      const cached = await cacheGet(cacheKey, 30 * 60 * 1000); // 30분 캐시
+      if (cached) return json({ success: true, cached: true, ageMin: Math.round(cached.ageMs / 60000), category: cat.name, data: cached.data });
+      const res = await coupangCall(`${CPATH}/bestcategories/${cat.id}`, `limit=${limit}`);
+      const items = (res.data || []).map((p: any) => mapCoupangItem(p, cat.name));
+      await cacheSet(cacheKey, items);
+      return json({ success: true, cached: false, category: cat.name, data: items, fetchedAt: new Date().toISOString() });
     }
 
     // 네이버 카테고리 트렌드
