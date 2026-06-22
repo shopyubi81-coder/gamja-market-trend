@@ -761,6 +761,8 @@ let isAliConfigured = false;
 let isCoupangConfigured = false;
 let coupangLiveData = null;
 let instaLiveData = null;
+let isTaobaoConfigured = false;
+let taobaoLiveData = null;
 
 // ===== 환경 설정: 로컬(Express) vs 배포(Supabase) =====
 const CFG = window.GAMJA_CONFIG || {};
@@ -788,7 +790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   render();
   loadBriefing();   // 🌅 오늘의 아침 브리핑 (일간 전체 요약)
   if (isNaverConfigured) loadNaverData(currentPeriod, null);
-  if (isAliConfigured && currentPlatform === 'china') loadAliData(null);
+  if (currentPlatform === 'china') { if (isTaobaoConfigured) loadTaobaoData(null); else if (isAliConfigured) loadAliData(null); }
 });
 
 // ===== 🌅 오늘의 아침 브리핑 (일간 트렌드 전체 요약) =====
@@ -938,6 +940,7 @@ async function checkStatus() {
     isSheetsConfigured = data.sheetsConfigured;
     isAliConfigured = data.aliConfigured;
     isCoupangConfigured = data.coupangConfigured;
+    isTaobaoConfigured = data.taobaoConfigured;
 
     document.getElementById('apiStatusBadge').textContent = isNaverConfigured ? '🟢 네이버 연동' : '⚙️ 설정 필요';
     document.getElementById('apiStatusBadge').className = `api-status ${isNaverConfigured ? 'ok' : 'warn'}`;
@@ -1030,7 +1033,10 @@ function setPlatform(p, btn) {
   document.querySelectorAll('.platform-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   render();
-  if ((p === 'china' || p === 'all') && isAliConfigured && !aliLiveData) loadAliData(null);
+  if (p === 'china' || p === 'all') {
+    if (isTaobaoConfigured && !taobaoLiveData) loadTaobaoData(null);
+    else if (isAliConfigured && !aliLiveData) loadAliData(null);
+  }
   if (p === 'coupang' && isCoupangConfigured && !coupangLiveData) loadCoupangData(null);
   if (p === 'instagram' && isNaverConfigured && !instaLiveData) loadInstaData(null);
 }
@@ -1041,7 +1047,10 @@ function setCategory(c, btn) {
   render();
   // 카테고리 바뀌면 실제 상품 재조회
   if (isNaverConfigured) loadNaverData(currentPeriod, null);
-  if (isAliConfigured && (currentPlatform === 'china' || currentPlatform === 'all')) loadAliData(null);
+  if (currentPlatform === 'china' || currentPlatform === 'all') {
+    if (isTaobaoConfigured) { taobaoLiveData = null; loadTaobaoData(null); }
+    else if (isAliConfigured) loadAliData(null);
+  }
   if (isCoupangConfigured && currentPlatform === 'coupang') { coupangLiveData = null; loadCoupangData(null); }
   if (isNaverConfigured && currentPlatform === 'instagram') { instaLiveData = null; loadInstaData(null); }
 }
@@ -1087,6 +1096,29 @@ async function loadAliData(btn) {
     }
   } catch (e) {
     showToast('알리 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 타오바오 인기 상품 (타오바오커, 60분 캐싱)
+async function loadTaobaoData(btn) {
+  if (!isTaobaoConfigured) { showToast('타오바오 키를 먼저 설정해주세요'); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    const cat = currentCategory !== 'all' ? `?category=${currentCategory}` : '';
+    const res = await afetch('/api/taobao/hot' + cat);
+    const json = await res.json();
+    if (json.success) {
+      taobaoLiveData = json.data;
+      const note = json.cached ? `(${json.ageMin}분 전 캐시)` : '(실시간)';
+      showToast(`타오바오 인기상품 ${json.data.length}개 ${note} ✓`);
+    } else {
+      showToast('타오바오 수집 실패: ' + (json.message || json.error));
+    }
+  } catch (e) {
+    showToast('타오바오 수집 실패: ' + e.message);
   } finally {
     if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
   }
@@ -1392,16 +1424,20 @@ function renderNaverPanel(periodLabel) {
 }
 
 function renderChinaPanel(periodLabel) {
-  const isReal = aliLiveData && aliLiveData.length > 0;
-  let items = isReal ? aliLiveData : getFilteredItems(MOCK.china[currentPeriod] || []);
+  // 타오바오 우선, 없으면 알리, 둘 다 없으면 목업
+  const live = (taobaoLiveData && taobaoLiveData.length) ? taobaoLiveData : aliLiveData;
+  const isReal = live && live.length > 0;
+  const srcName = (taobaoLiveData && taobaoLiveData.length) ? '타오바오' : '알리';
+  const refreshFn = isTaobaoConfigured ? 'loadTaobaoData(this)' : 'loadAliData(this)';
+  let items = isReal ? live : getFilteredItems(MOCK.china[currentPeriod] || []);
 
   let html = `<div class="trend-panel">
     <div class="panel-header">
       <div class="panel-title">
         <span class="panel-platform-badge badge-china">중국 직구</span>
-        ${periodLabel} 알리·테무 트렌드 ${isReal ? '<span class="live-badge">실시간</span>' : '<span class="mock-badge">목업</span>'}
+        ${isReal ? srcName+' 인기상품' : periodLabel+' 알리·테무 트렌드'} ${isReal ? '<span class="live-badge">실시간</span>' : '<span class="mock-badge">목업</span>'}
       </div>
-      <button class="refresh-btn" onclick="loadAliData(this)">↻ 새로고침</button>
+      <button class="refresh-btn" onclick="${refreshFn}">↻ 새로고침</button>
     </div>`;
 
   if (!isAliConfigured && !isReal) {
@@ -1418,7 +1454,7 @@ function renderChinaPanel(periodLabel) {
       const rank = idx + 1;
       const id = 'cn_' + (item.id || item.productId || rank);
       const sel = !!selectedItems[id];
-      const srcBadge = item.source === '테무' ? '🟠 테무' : item.source === '알리' ? '🔴 알리' : '🛒 직구';
+      const srcBadge = item.source === '테무' ? '🟠 테무' : item.source === '알리' ? '🔴 알리' : item.source === '타오바오' ? '🟡 타오바오' : '🛒 직구';
       const sItem = {
         id, name: item.name, category: item.category, subCategory: item.subCategory,
         cat: item.cat || currentCategory, emoji: item.emoji || '🛒', trend: item.trend || 'up',

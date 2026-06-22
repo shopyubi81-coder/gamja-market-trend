@@ -17,6 +17,9 @@ const ALI_APP_SECRET = Deno.env.get("ALI_APP_SECRET") ?? "";
 const ALI_TRACKING_ID = Deno.env.get("ALI_TRACKING_ID") ?? "";
 const COUPANG_ACCESS_KEY = Deno.env.get("COUPANG_ACCESS_KEY") ?? "";
 const COUPANG_SECRET_KEY = Deno.env.get("COUPANG_SECRET_KEY") ?? "";
+const TAOBAO_APP_KEY = Deno.env.get("TAOBAO_APP_KEY") ?? "";
+const TAOBAO_APP_SECRET = Deno.env.get("TAOBAO_APP_SECRET") ?? "";
+const TAOBAO_ADZONE_ID = Deno.env.get("TAOBAO_ADZONE_ID") ?? "";
 // Supabase가 Edge Function에 자동 주입하는 값 (캐시 테이블 접근용)
 const SB_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SB_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -33,6 +36,7 @@ const json = (body: unknown, status = 200) =>
 const naverConfigured = () => !!(NAVER_CLIENT_ID && NAVER_CLIENT_SECRET);
 const aliConfigured = () => !!(ALI_APP_KEY && ALI_APP_SECRET);
 const coupangConfigured = () => !!(COUPANG_ACCESS_KEY && COUPANG_SECRET_KEY);
+const taobaoConfigured = () => !!(TAOBAO_APP_KEY && TAOBAO_APP_SECRET && TAOBAO_ADZONE_ID);
 
 // ===== Supabase 캐시 (api_cache 테이블) — 쿠팡 호출 한도 보호 =====
 async function cacheGet(key: string, ttlMs: number) {
@@ -241,6 +245,46 @@ async function aliCall(method: string, biz: Record<string, string>) {
   return await r.json();
 }
 
+// ===== 타오바오커(淘宝客) TOP API — MD5 서명 =====
+// 카테고리 → 타오바오 검색어(중국어)
+const TAOBAO_KEYWORDS: Record<string, string> = {
+  food: "零食", beauty: "化妆品", fashion: "连衣裙", home: "居家",
+  kids: "母婴", pet: "宠物用品", digital: "数码", all: "热销",
+};
+async function taobaoCall(method: string, biz: Record<string, string>) {
+  // TOP 타임스탬프: "yyyy-MM-dd HH:mm:ss" (GMT+8)
+  const timestamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  const sys: Record<string, string> = {
+    method, app_key: TAOBAO_APP_KEY, sign_method: "md5", timestamp, format: "json", v: "2.0",
+  };
+  const all = { ...sys, ...biz };
+  let base = TAOBAO_APP_SECRET;
+  for (const k of Object.keys(all).sort()) base += k + all[k];
+  base += TAOBAO_APP_SECRET;
+  (all as any).sign = await md5Upper(base);
+  const url = new URL("https://eco.taobao.com/router/rest");
+  for (const [k, v] of Object.entries(all)) url.searchParams.set(k, v as string);
+  const r = await fetch(url, { method: "POST" });
+  return await r.json();
+}
+function mapTaobaoItem(p: any) {
+  const fixUrl = (u: string) => !u ? "" : (u.startsWith("//") ? "https:" + u : u);
+  const price = p.zk_final_price || p.reserve_price;
+  return {
+    id: "tb_" + (p.item_id || p.num_iid),
+    name: p.title,
+    source: "타오바오",
+    price,
+    priceText: price ? `¥${price}` : "가격문의",
+    originalPrice: p.reserve_price ? `¥${p.reserve_price}` : null,
+    salesVolume: p.volume || p.tk_total_sales,   // 판매량
+    image: fixUrl(p.pict_url),
+    link: fixUrl(p.coupon_share_url || p.url || p.item_url),
+    category: p.category_name || "타오바오",
+    shopName: p.shop_title || p.nick,
+  };
+}
+
 // ===== 일일 종합 보고서 =====
 function todayKST() {
   const d = new Date(Date.now() + 9 * 3600 * 1000); // KST
@@ -319,7 +363,28 @@ Deno.serve(async (req) => {
 
   try {
     if (path === "/api/status") {
-      return json({ naverConfigured: naverConfigured(), aliConfigured: aliConfigured(), coupangConfigured: coupangConfigured(), serverTime: new Date().toISOString() });
+      return json({ naverConfigured: naverConfigured(), aliConfigured: aliConfigured(), coupangConfigured: coupangConfigured(), taobaoConfigured: taobaoConfigured(), serverTime: new Date().toISOString() });
+    }
+
+    // ===== 타오바오 인기 상품 (타오바오커 물료검색, 60분 캐싱) =====
+    if (path === "/api/taobao/hot") {
+      if (!taobaoConfigured()) return json({ error: "TAOBAO_API_NOT_CONFIGURED" }, 503);
+      const catKey = q.get("category") || "all";
+      const kw = TAOBAO_KEYWORDS[catKey] || TAOBAO_KEYWORDS.all;
+      const cacheKey = `taobao:hot:${catKey}`;
+      const cached = await cacheGet(cacheKey, 60 * 60 * 1000);
+      if (cached) return json({ success: true, cached: true, ageMin: Math.round(cached.ageMs / 60000), data: cached.data });
+      const biz: Record<string, string> = {
+        adzone_id: TAOBAO_ADZONE_ID, q: kw, page_size: "20", page_no: "1",
+        sort: "tk_total_sales_des", platform: "2",
+      };
+      const data = await taobaoCall("taobao.tbk.dg.material.optional", biz);
+      const err = data?.error_response;
+      if (err) throw new Error(`Taobao ${err.code}: ${err.sub_msg || err.msg}`);
+      const list = data?.tbk_dg_material_optional_response?.result_list?.map_data || [];
+      const items = list.map(mapTaobaoItem);
+      await cacheSet(cacheKey, items);
+      return json({ success: true, cached: false, data: items, fetchedAt: new Date().toISOString() });
     }
 
     // ===== 일일 보고서 생성 (cron 또는 수동) =====
