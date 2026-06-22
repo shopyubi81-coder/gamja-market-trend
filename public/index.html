@@ -231,6 +231,24 @@
   .spin { display: inline-block; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* 기회점수 패널 */
+  .opp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px 6px; }
+  @media (max-width: 1100px) { .opp-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .opp-grid { grid-template-columns: 1fr; } }
+  .opp-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 13px; background: white; transition: all 0.15s; }
+  .opp-card:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(255,107,44,0.12); }
+  .opp-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .opp-rank { width: 22px; height: 22px; border-radius: 6px; background: var(--bg); font-size: 12px; font-weight: 700; color: var(--sub); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .opp-name { flex: 1; font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opp-score { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 10px; flex-shrink: 0; }
+  .opp-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 9px; }
+  .opp-bar { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--sub); }
+  .opp-bar span { width: 26px; flex-shrink: 0; }
+  .opp-bar b { width: 56px; text-align: right; color: var(--text); font-size: 11px; flex-shrink: 0; }
+  .opp-track { flex: 1; height: 7px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .opp-track div { height: 100%; border-radius: 4px; }
+  .opp-signal { font-size: 11.5px; font-weight: 600; color: var(--text); background: var(--bg); border-radius: 7px; padding: 6px 9px; line-height: 1.35; }
+
   .empty-state { text-align: center; padding: 40px 20px; color: var(--sub); }
   .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
   .empty-state p { font-size: 14px; }
@@ -763,6 +781,40 @@ let coupangLiveData = null;
 let instaLiveData = null;
 let isTaobaoConfigured = false;
 let taobaoLiveData = null;
+let opportunityData = null;  // 기회점수 (카테고리 단위)
+
+// 네이버 카테고리명 → 경쟁도 측정용 검색어
+const OPP_KW = {
+  '식품':'간편식', '화장품/미용':'화장품', '패션의류':'여성의류', '가구/인테리어':'인테리어소품',
+  '출산/육아':'유아용품', '스포츠/레저':'스포츠용품', '디지털/가전':'가전'
+};
+
+// 기회점수 계산: 성장률 40% + 시장규모 25% + (낮은)경쟁도 35%
+//  ※ 평점·리뷰 신호는 리뷰 데이터 확보(Phase 2) 후 추가
+async function loadOpportunity() {
+  if (!isNaverConfigured || !naverLiveData || naverLiveData.length === 0) return;
+  try {
+    const cats = naverLiveData;
+    // 경쟁도: 카테고리 대표어의 네이버 검색 결과 수 (적을수록 진입 유리)
+    const totals = await Promise.all(cats.map(c =>
+      afetch(`/api/naver/search?q=${encodeURIComponent(OPP_KW[c.name] || c.name)}&display=1`)
+        .then(r => r.json()).then(j => j.total || 0).catch(() => 0)
+    ));
+    // 경쟁도 순위 정규화 (총량 스케일이 제각각이라 랭크 기반)
+    const ranked = cats.map((c, i) => ({ i, total: totals[i] })).sort((a, b) => a.total - b.total);
+    const compByIdx = {};
+    ranked.forEach((o, rank) => { compByIdx[o.i] = cats.length > 1 ? Math.round((1 - rank / (cats.length - 1)) * 100) : 100; });
+
+    opportunityData = cats.map((c, i) => {
+      const growth = Math.max(0, Math.min(100, Math.round(50 + (c.change || 0) * 4))); // +10% → 90
+      const size = Math.round(parseFloat(c.ratio));                                     // 0~100
+      const comp = compByIdx[i];                                                         // 낮은 경쟁 → 높은 점수
+      const score = Math.round(0.40 * growth + 0.25 * size + 0.35 * comp);
+      return { name: c.name, change: c.change, ratio: c.ratio, total: totals[i], growth, size, comp, score };
+    }).sort((a, b) => b.score - a.score);
+    render();
+  } catch (e) { /* 조용히 무시 */ }
+}
 
 // ===== 환경 설정: 로컬(Express) vs 배포(Supabase) =====
 const CFG = window.GAMJA_CONFIG || {};
@@ -969,6 +1021,7 @@ async function loadNaverData(period, btn) {
       document.getElementById('dataSourceBadge').textContent = '실시간 데이터';
       document.getElementById('dataSourceBadge').className = 'live-badge';
       document.getElementById('lastFetchTime').textContent = `수집: ${new Date(json.fetchedAt).toLocaleTimeString('ko-KR')}`;
+      loadOpportunity(); // 기회점수 계산 (비동기, 끝나면 자체 render)
     }
     render();
     // 2) 실제 상품 — 카테고리 선택 시 해당 분야 TOP 20, 전체면 상위 카테고리별
@@ -1020,6 +1073,7 @@ function setPeriod(p, btn) {
   naverLiveData = null;
   naverProducts = null;
   aliLiveData = null;
+  opportunityData = null;
   document.getElementById('dataSourceBadge').textContent = '목업 데이터';
   document.getElementById('dataSourceBadge').className = 'mock-badge';
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
@@ -1209,6 +1263,11 @@ function render() {
   const periodLabel = { daily:'일간', weekly:'주간', monthly:'월간', yearly:'연간' }[currentPeriod];
   let html = '';
 
+  // 🎯 기회점수 — 의사결정 레이어 (네이버/전체 탭 상단)
+  if ((currentPlatform === 'all' || currentPlatform === 'naver') && opportunityData) {
+    html += renderOpportunityPanel();
+  }
+
   // Keywords — 네이버 연결 시 실제 상품명 기반, 아니면 목업
   if (currentPlatform === 'all' || currentPlatform === 'naver') {
     const realKw = extractNaverKeywords();
@@ -1287,6 +1346,60 @@ function render() {
 
   dashboard.innerHTML = html;
   updateSummary();
+}
+
+function renderOpportunityPanel() {
+  const catMapRev = { '식품':'food', '화장품/미용':'beauty', '패션의류':'fashion', '가구/인테리어':'home', '출산/육아':'kids', '스포츠/레저':'pet', '디지털/가전':'digital' };
+  const tier = s => s >= 75 ? { c:'#0F9D58', bg:'#E7F6EE', t:'추천' } : s >= 60 ? { c:'#D97706', bg:'#FEF3C7', t:'관심' } : { c:'#6B7280', bg:'#F3F4F6', t:'보류' };
+  const compLabel = c => c >= 67 ? '낮음(유리)' : c >= 34 ? '중간' : '높음';
+  const signal = o => {
+    const g = o.growth >= 70, lowComp = o.comp >= 67, big = o.size >= 60;
+    if (g && lowComp) return '🟢 성장 강함 · 경쟁 낮음 → 진입 유리';
+    if (g && !lowComp) return '🟡 성장 강하나 경쟁 치열 → 차별화 필요';
+    if (!g && lowComp && big) return '🔵 시장 크고 경쟁 낮음 → 안정적 기회';
+    if (!g && !lowComp) return '⚪ 성숙·경쟁 시장 → 신중 검토';
+    return '⚪ 추가 신호 확인 필요';
+  };
+  let html = `<div class="trend-panel" style="grid-column: span 3; border:1.5px solid var(--primary)">
+    <div class="panel-header" style="background:#FFF9F5">
+      <div class="panel-title">🎯 오늘의 기회점수 <span style="font-size:11px;font-weight:500;color:var(--sub)">· 어떤 분야를 파고들지 우선순위</span></div>
+      <button class="refresh-btn" onclick="loadOpportunity()">↻ 재계산</button>
+    </div>
+    <div class="opp-grid">`;
+  opportunityData.forEach((o, idx) => {
+    const tr = tier(o.score);
+    const catKey = catMapRev[o.name];
+    html += `<div class="opp-card" ${catKey ? `onclick="oppDrill('${catKey}')" style="cursor:pointer"` : ''}>
+      <div class="opp-top">
+        <div class="opp-rank">${idx+1}</div>
+        <div class="opp-name">${o.name}</div>
+        <div class="opp-score" style="background:${tr.bg};color:${tr.c}">${o.score}점 · ${tr.t}</div>
+      </div>
+      <div class="opp-bars">
+        <div class="opp-bar"><span>성장</span><div class="opp-track"><div style="width:${o.growth}%;background:#EF4444"></div></div><b>${(o.change>0?'+':'')+o.change}%</b></div>
+        <div class="opp-bar"><span>시장</span><div class="opp-track"><div style="width:${o.size}%;background:#03C75A"></div></div><b>${o.size}</b></div>
+        <div class="opp-bar"><span>경쟁</span><div class="opp-track"><div style="width:${o.comp}%;background:#3B82F6"></div></div><b>${compLabel(o.comp)}</b></div>
+      </div>
+      <div class="opp-signal">${signal(o)}</div>
+    </div>`;
+  });
+  html += `</div>
+    <div style="padding:8px 20px 14px;font-size:11px;color:var(--sub)">
+      ※ 점수 = 성장률 40% + 시장규모 25% + (낮은)경쟁도 35%. <b>평점·리뷰 신호는 리뷰 데이터 확보(다음 단계) 후 추가</b>됩니다. 카드를 누르면 해당 분야 실제 상품을 봅니다.
+    </div>
+  </div>`;
+  return html;
+}
+
+function oppDrill(catKey) {
+  const btn = [...document.querySelectorAll('.cat-btn')].find(b => b.getAttribute('onclick')?.includes(`'${catKey}'`));
+  currentCategory = catKey;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (currentPlatform !== 'naver') { currentPlatform = 'naver'; document.querySelectorAll('.platform-tab').forEach(b => b.classList.toggle('active', b.dataset.platform === 'naver')); }
+  render();
+  if (isNaverConfigured) loadNaverData(currentPeriod, null);
+  showToast(`"${catKey}" 분야 상품을 불러옵니다`);
 }
 
 function renderNaverPanel(periodLabel) {
