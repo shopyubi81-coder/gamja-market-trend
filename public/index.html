@@ -264,6 +264,8 @@
   .rev-cloud { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; padding: 6px 0; }
   .rev-cloud span { font-weight: 700; color: var(--text); }
   .rev-insight { margin-top: 16px; background: #FFF9F5; border-left: 4px solid var(--primary); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--text); }
+  .rev-hist { background: var(--bg); border-radius: 10px; padding: 11px 13px; margin-bottom: 9px; }
+  .ra-badge { margin-top: 6px; font-size: 11px; background: #E7F6EE; color: #0F6B3F; border-radius: 7px; padding: 5px 8px; line-height: 1.4; }
 
   .empty-state { text-align: center; padding: 40px 20px; color: var(--sub); }
   .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
@@ -614,9 +616,14 @@
       <input id="revProduct" class="note-area" style="min-height:auto;margin-bottom:10px" placeholder="상품명 (선택) — 예: 캠핑 선풍기" />
       <textarea id="revInput" class="note-area" style="min-height:140px" placeholder="여기에 리뷰를 붙여넣으세요. 리뷰 한 건당 한 줄(엔터)로 구분하면 더 정확합니다.&#10;예)&#10;소음이 거의 없어서 너무 좋아요. 배터리도 오래가고 가성비 최고.&#10;무게가 좀 무겁고 충전이 느린 게 아쉬워요."></textarea>
       <div id="revResult" style="margin-top:16px"></div>
+      <div id="revSaveRow" style="display:none;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <select id="revLinkSel" class="note-area" style="min-height:auto;flex:1;min-width:160px;padding:8px"></select>
+        <button class="btn-primary btn-sheets" style="flex:none" onclick="saveReviewAnalysis(this)">💾 저장</button>
+      </div>
     </div>
     <div class="report-foot">
-      <button class="btn-outline" onclick="document.getElementById('revInput').value='';document.getElementById('revResult').innerHTML='';">지우기</button>
+      <button class="btn-outline" onclick="showReviewHistory()">📚 이력</button>
+      <button class="btn-outline" onclick="document.getElementById('revInput').value='';document.getElementById('revResult').innerHTML='';document.getElementById('revSaveRow').style.display='none';">지우기</button>
       <button class="btn-primary" style="flex:none" onclick="analyzeReviews()">🔍 분석하기</button>
     </div>
   </div>
@@ -1899,6 +1906,7 @@ function renderDrawer() {
         <div class="meta">${platL[item.platform]} · ${item.subCategory||item.category} · ${item.change}</div>
         ${item.priceRange?`<div class="meta">💰 ${item.priceRange} · 👤 ${item.target||'-'}</div>`:''}
         ${(item.keywords||[]).length?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px">${item.keywords.slice(0,3).map(k=>`<span style="font-size:10px;background:#F3F4F6;padding:2px 6px;border-radius:8px">#${k}</span>`).join('')}</div>`:''}
+        <div id="ra-${item.id}" class="ra-slot"></div>
       </div>
       <button class="remove-btn" onclick='toggleSelect(${JSON.stringify(item.id)},"${item.platform}",${safe})'>✕</button>
     </div>`;
@@ -1907,6 +1915,25 @@ function renderDrawer() {
   html += `<textarea class="note-area" id="selectionNote" placeholder="선별 이유, 발주 수량, 특이사항, 가격대 등...">${window._savedNote||''}</textarea>`;
   html += `<div id="sheetsResult"></div>`;
   body.innerHTML = html;
+  loadDrawerAnalyses();
+}
+
+// 선별 상품에 연결된 리뷰 분석을 드로어에 표시
+async function loadDrawerAnalyses() {
+  if (!sb) return;
+  const ids = Object.keys(selectedItems);
+  if (!ids.length) return;
+  try {
+    const { data } = await sb.from('review_analysis').select('item_id,pos_pct,neg_pct,insight').in('item_id', ids).order('created_at', { ascending: false });
+    if (!data) return;
+    const seen = {};
+    data.forEach(r => {
+      if (!r.item_id || seen[r.item_id]) return;
+      seen[r.item_id] = true;
+      const slot = document.getElementById('ra-' + r.item_id);
+      if (slot) slot.innerHTML = `<div class="ra-badge">📝 리뷰분석 · 😊${r.pos_pct}% 😟${r.neg_pct}%${r.insight ? ` · ${r.insight}` : ''}</div>`;
+    });
+  } catch (e) { /* 무시 */ }
 }
 
 async function clearSelected() {
@@ -1991,7 +2018,7 @@ function showToast(msg) {
 
 // ===== 일일 종합 보고서 =====
 // ===== 리뷰 분석기 (코드 기반 빈도분석, 무료·토큰0) =====
-function openReviewAnalyzer() { document.getElementById('reviewOverlay').classList.add('open'); }
+function openReviewAnalyzer() { document.getElementById('reviewOverlay').classList.add('open'); fillRevLinkOptions(); }
 function closeReviewAnalyzer() { document.getElementById('reviewOverlay').classList.remove('open'); }
 
 const REV_POS = ['좋','만족','최고','가성비','저렴','싸','빠르','튼튼','편하','편리','부드','조용','가벼','예쁘','이쁘','깔끔','우수','추천','괜찮','강추','굿','훌륭','선명','넉넉','시원','마음에','대박','완벽','감동','짱','신세계','재구매'];
@@ -2038,14 +2065,88 @@ function analyzeReviews() {
   html += `<div class="rev-h" style="margin-top:14px">☁️ 자주 나온 단어</div><div class="rev-cloud">${wc.map(([w, c]) => { const sz = 12 + Math.round(c / maxW * 11); return `<span style="font-size:${sz}px;opacity:${(0.55 + c / maxW * 0.45).toFixed(2)}">${w}</span>`; }).join('')}</div>`;
 
   const tPos = top(posFreq, 1)[0], tNeg = top(negFreq, 1)[0];
+  const pL = tPos ? (REV_LABEL[tPos[0]] || tPos[0]) : '', nL = tNeg ? (REV_LABEL[tNeg[0]] || tNeg[0]) : '';
+  let insightText = '';
   if (tPos || tNeg) {
-    html += `<div class="rev-insight">💡 <b>MD 인사이트</b>: `
-      + (tPos ? `고객은 <b>${REV_LABEL[tPos[0]] || tPos[0]}</b>을(를) 가장 좋아함` : '')
-      + (tNeg ? `${tPos ? ', ' : ''}<b>${REV_LABEL[tNeg[0]] || tNeg[0]}</b>이(가) 최대 불만 → 이걸 개선한 상품이 <b>차별화 포인트</b>` : '')
-      + `</div>`;
+    insightText = (pL ? `고객은 ${pL}을(를) 가장 좋아함` : '')
+      + (nL ? `${pL ? ', ' : ''}${nL}이(가) 최대 불만 → 이걸 개선한 상품이 차별화 포인트` : '');
+    const insightHtml = (pL ? `고객은 <b>${pL}</b>을(를) 가장 좋아함` : '')
+      + (nL ? `${pL ? ', ' : ''}<b>${nL}</b>이(가) 최대 불만 → 이걸 개선한 상품이 <b>차별화 포인트</b>` : '');
+    html += `<div class="rev-insight">💡 <b>MD 인사이트</b>: ${insightHtml}</div>`;
   }
   out.innerHTML = html;
+
+  // 저장용 결과 보관
+  lastReviewAnalysis = {
+    product_name: (document.getElementById('revProduct').value || '').trim(),
+    pos_pct: posPct, neg_pct: negPct, total,
+    pos_keywords: top(posFreq, 8).map(([k, v]) => [REV_LABEL[k] || k, v]),
+    neg_keywords: top(negFreq, 8).map(([k, v]) => [REV_LABEL[k] || k, v]),
+    word_cloud: wc.map(([w, c]) => [w, c]),
+    insight: insightText,
+  };
+  document.getElementById('revSaveRow').style.display = sb ? 'flex' : 'none';
   showToast(`리뷰 ${total}건 분석 완료 (무료) ✓`);
+}
+
+let lastReviewAnalysis = null;
+
+// 선별 상품 연결용 드롭다운 채우기
+function fillRevLinkOptions() {
+  const sel = document.getElementById('revLinkSel');
+  if (!sel) return;
+  const items = Object.values(selectedItems);
+  sel.innerHTML = `<option value="">선별 상품에 연결 안 함</option>` +
+    items.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
+}
+
+async function saveReviewAnalysis(btn) {
+  if (!sb) { showToast('저장하려면 Supabase 연결이 필요합니다'); return; }
+  if (!lastReviewAnalysis) { showToast('먼저 분석을 실행하세요'); return; }
+  const linkId = document.getElementById('revLinkSel').value || null;
+  const linkName = linkId ? (selectedItems[linkId]?.name || '') : '';
+  const pname = lastReviewAnalysis.product_name || linkName || '(이름없음)';
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  try {
+    const { error } = await sb.from('review_analysis').insert({
+      product_name: pname, item_id: linkId,
+      pos_pct: lastReviewAnalysis.pos_pct, neg_pct: lastReviewAnalysis.neg_pct, total: lastReviewAnalysis.total,
+      pos_keywords: lastReviewAnalysis.pos_keywords, neg_keywords: lastReviewAnalysis.neg_keywords,
+      word_cloud: lastReviewAnalysis.word_cloud, insight: lastReviewAnalysis.insight,
+    });
+    if (error) throw error;
+    showToast(`"${pname}" 분석 저장됨 ✓${linkId ? ' (선별상품 연결)' : ''}`);
+  } catch (e) { showToast('저장 실패: ' + (e.message || e)); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '💾 저장'; } }
+}
+
+async function showReviewHistory() {
+  const out = document.getElementById('revResult');
+  if (!sb) { out.innerHTML = '<div style="color:var(--sub);font-size:13px">이력은 Supabase 연결 시 사용 가능합니다.</div>'; return; }
+  out.innerHTML = '<div style="color:var(--sub);font-size:13px">이력 불러오는 중...</div>';
+  try {
+    const { data, error } = await sb.from('review_analysis').select('*').order('created_at', { ascending: false }).limit(30);
+    if (error) throw error;
+    if (!data || !data.length) { out.innerHTML = '<div style="color:var(--sub);font-size:13px">저장된 분석 이력이 없습니다.</div>'; return; }
+    out.innerHTML = `<div class="rev-h">📚 분석 이력 (${data.length})</div>` + data.map(r => `
+      <div class="rev-hist">
+        <div style="display:flex;align-items:center;gap:8px">
+          <b style="flex:1">${r.product_name || '(이름없음)'}</b>
+          <span style="font-size:11px;color:#0F9D58">긍 ${r.pos_pct}%</span>
+          <span style="font-size:11px;color:#EF4444">부 ${r.neg_pct}%</span>
+          <span style="font-size:11px;color:var(--sub)">${new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
+          <button class="remove-btn" onclick="delReviewHistory('${r.id}', this)">✕</button>
+        </div>
+        ${r.insight ? `<div style="font-size:12px;color:var(--sub);margin-top:4px">💡 ${r.insight}</div>` : ''}
+        <div class="rev-chips" style="margin-top:6px">${(r.pos_keywords||[]).slice(0,4).map(k=>`<span class="rev-chip pos">${k[0]} <b>${k[1]}</b></span>`).join('')}${(r.neg_keywords||[]).slice(0,4).map(k=>`<span class="rev-chip neg">${k[0]} <b>${k[1]}</b></span>`).join('')}</div>
+      </div>`).join('');
+  } catch (e) { out.innerHTML = `<div style="color:var(--sub);font-size:13px">불러오기 실패: ${e.message||e}</div>`; }
+}
+
+async function delReviewHistory(id, btn) {
+  if (!sb) return;
+  try { await sb.from('review_analysis').delete().eq('id', id); btn.closest('.rev-hist').remove(); showToast('삭제됨'); }
+  catch (e) { showToast('삭제 실패'); }
 }
 
 function openReport() {
