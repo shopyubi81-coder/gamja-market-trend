@@ -713,6 +713,7 @@ let isSheetsConfigured = false;
 let isAliConfigured = false;
 let isCoupangConfigured = false;
 let coupangLiveData = null;
+let instaLiveData = null;
 
 // ===== 환경 설정: 로컬(Express) vs 배포(Supabase) =====
 const CFG = window.GAMJA_CONFIG || {};
@@ -984,6 +985,7 @@ function setPlatform(p, btn) {
   render();
   if ((p === 'china' || p === 'all') && isAliConfigured && !aliLiveData) loadAliData(null);
   if (p === 'coupang' && isCoupangConfigured && !coupangLiveData) loadCoupangData(null);
+  if (p === 'instagram' && isNaverConfigured && !instaLiveData) loadInstaData(null);
 }
 function setCategory(c, btn) {
   currentCategory = c;
@@ -994,6 +996,7 @@ function setCategory(c, btn) {
   if (isNaverConfigured) loadNaverData(currentPeriod, null);
   if (isAliConfigured && (currentPlatform === 'china' || currentPlatform === 'all')) loadAliData(null);
   if (isCoupangConfigured && currentPlatform === 'coupang') { coupangLiveData = null; loadCoupangData(null); }
+  if (isNaverConfigured && currentPlatform === 'instagram') { instaLiveData = null; loadInstaData(null); }
 }
 
 // 네이버 실제 상품명에서 인기 키워드 추출
@@ -1070,6 +1073,29 @@ async function loadCoupangData(btn) {
   render();
 }
 
+// 인스타 트렌드 (해시태그 → 네이버 인기도/상품, 60분 캐싱)
+async function loadInstaData(btn) {
+  if (!isNaverConfigured) { showToast('네이버 연결 필요 (인스타는 네이버 데이터 기반)'); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    const cat = currentCategory !== 'all' ? `?category=${currentCategory}` : '';
+    const res = await afetch('/api/insta/trends' + cat);
+    const json = await res.json();
+    if (json.success) {
+      instaLiveData = json.data;
+      const note = json.cached ? `(${json.ageMin}분 전 캐시)` : '(실시간)';
+      showToast(`인스타 트렌드 ${json.data.length}개 ${note} ✓`);
+    } else {
+      showToast('인스타 수집 실패: ' + (json.message || json.error));
+    }
+  } catch (e) {
+    showToast('인스타 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
 // 키워드 클릭 → 실제 상품 검색 결과를 네이버 패널 상단에 표시
 async function searchKeyword(kw) {
   if (!isNaverConfigured) { showToast(`"${kw}" 키워드 (네이버 미연결)`); return; }
@@ -1125,6 +1151,7 @@ function render() {
     if (p === 'naver') { html += renderNaverPanel(periodLabel); continue; }
     if (p === 'china') { html += renderChinaPanel(periodLabel); continue; }
     if (p === 'coupang') { html += renderCoupangPanel(periodLabel); continue; }
+    if (p === 'instagram') { html += renderInstaPanel(periodLabel); continue; }
     const items = getFilteredItems(MOCK[p]?.[currentPeriod] || []);
     const platLabel = { coupang:'쿠팡', instagram:'인스타그램' }[p];
     const badgeClass = `badge-${p}`;
@@ -1455,6 +1482,76 @@ function renderCoupangPanel(periodLabel) {
       </div>`;
     });
   }
+  html += `</div></div>`;
+  return html;
+}
+
+function renderInstaPanel(periodLabel) {
+  const isReal = instaLiveData && instaLiveData.length > 0;
+  let html = `<div class="trend-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="panel-platform-badge badge-instagram">인스타그램</span>
+        인기 해시태그 ${isReal ? '<span class="live-badge">네이버 기반</span>' : '<span class="mock-badge">목업</span>'}
+      </div>
+      <button class="refresh-btn" onclick="loadInstaData(this)">↻ 새로고침</button>
+    </div>`;
+
+  if (!isReal) {
+    const items = getFilteredItems(MOCK.instagram[currentPeriod] || []);
+    html += `<div style="padding:10px 20px 0; font-size:12px; color:var(--sub)">💡 해시태그 인기도는 <b>네이버 검색 데이터</b> 기반입니다 · <a href="#" onclick="loadInstaData(null); return false" style="color:var(--primary)">실데이터 불러오기</a></div>`;
+    html += `<div class="trend-list">`;
+    items.forEach((item, idx) => {
+      const sel = !!selectedItems[item.id];
+      const safe = JSON.stringify({...item, platform:'instagram'}).replace(/'/g,"&#39;");
+      html += `<div class="trend-item ${sel?'selected':''}">
+        <div class="item-top">
+          <div class="rank ${idx<3?'top3':''}">${idx+1}</div>
+          <div class="item-emoji">${item.emoji}</div>
+          <div class="item-main"><div class="item-name">${item.name}</div><div class="item-sub"><span>${item.category} · ${item.change}</span></div></div>
+          <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${item.id}","instagram",${safe})'>${sel?'✓':'+'}</button>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+    return html;
+  }
+
+  // 실데이터: 해시태그 순위 + 인기도 막대 + 관련 상품
+  const maxPop = Math.max(...instaLiveData.map(t => t.popularity), 1);
+  html += `<div style="padding:8px 20px 0; font-size:11px; color:var(--sub)">📊 인기도 = 네이버 검색 상품 수 (관심도 지표) · 60분 캐시</div>`;
+  html += `<div class="trend-list">`;
+  instaLiveData.forEach((t, idx) => {
+    const pct = Math.round((t.popularity / maxPop) * 100);
+    const top = t.products && t.products[0];
+    const id = 'ig_' + (t.tag || idx);
+    const sel = !!selectedItems[id];
+    const sItem = {
+      id, name: t.tag, category: t.category, subCategory: '',
+      cat: t.cat, emoji: '📷', trend: 'up', change: `검색 ${(t.popularity).toLocaleString()}건`,
+      priceRange: top ? top.priceText : '', target: `네이버 검색어: ${t.keyword}`,
+      keywords: [t.keyword], reason: `인스타 인기 해시태그 "${t.tag}" → 네이버에서 "${t.keyword}" 관련 상품 ${(t.popularity).toLocaleString()}건`,
+      link: top ? top.link : '', image: top ? top.image : '', mallName: '네이버', brand: ''
+    };
+    const safe = JSON.stringify(sItem).replace(/'/g,"&#39;");
+    html += `<div class="trend-item ${sel?'selected':''}">
+      <div class="item-top">
+        <div class="rank ${idx<3?'top3':''}">${idx+1}</div>
+        <div class="item-emoji">📷</div>
+        <div class="item-main">
+          <div class="item-name">${t.tag}</div>
+          <div class="item-sub"><span>${t.category}</span><span class="sep">|</span><span>🔍 ${t.keyword}</span></div>
+        </div>
+        <div class="item-right"><span class="trend-change up">${(t.popularity).toLocaleString()}건</span></div>
+      </div>
+      <div class="chart-bar-wrap" style="margin:8px 0"><div class="chart-bar" style="width:${pct}%; background:var(--insta)"><span>${pct}</span></div></div>
+      ${(t.products && t.products.length) ? `<div class="item-keywords">${t.products.slice(0,3).map(p=>`<span class="kw-tag" onclick="window.open('${p.link}','_blank')" style="cursor:pointer">🛒 ${p.name.slice(0,16)}… ${p.priceText}</span>`).join('')}</div>` : ''}
+      <div class="item-footer" style="gap:8px">
+        ${top && top.link ? `<a href="${top.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 대표상품</a>` : ''}
+        <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","instagram",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
+      </div>
+    </div>`;
+  });
   html += `</div></div>`;
   return html;
 }

@@ -97,6 +97,30 @@ const COUPANG_CATEGORY: Record<string, { id: string; name: string }> = {
 };
 const CPATH = "/v2/providers/affiliate_open_api/apis/openapi/v1/products";
 
+// ===== 인스타 인기 해시태그 (계절·트렌드 반영, 주기적 업데이트) =====
+// tag=화면표시 해시태그, kw=네이버 검색어, cat=우리 카테고리, catName=표시명
+const INSTA_HASHTAGS = [
+  { tag: "#오운완", kw: "홈트레이닝", cat: "food", catName: "식품/건강" },
+  { tag: "#홈카페", kw: "홈카페용품", cat: "food", catName: "식품/건강" },
+  { tag: "#다이어트식단", kw: "다이어트식품", cat: "food", catName: "식품/건강" },
+  { tag: "#그릭요거트", kw: "그릭요거트", cat: "food", catName: "식품/건강" },
+  { tag: "#여름네일", kw: "셀프네일", cat: "beauty", catName: "뷰티/화장품" },
+  { tag: "#데일리메이크업", kw: "쿠션팩트", cat: "beauty", catName: "뷰티/화장품" },
+  { tag: "#선케어", kw: "선크림", cat: "beauty", catName: "뷰티/화장품" },
+  { tag: "#여름코디", kw: "여름원피스", cat: "fashion", catName: "패션/의류" },
+  { tag: "#린넨룩", kw: "린넨셔츠", cat: "fashion", catName: "패션/의류" },
+  { tag: "#휴가룩", kw: "비치웨어", cat: "fashion", catName: "패션/의류" },
+  { tag: "#공간꾸미기", kw: "인테리어소품", cat: "home", catName: "홈/리빙" },
+  { tag: "#제로웨이스트", kw: "친환경생활용품", cat: "home", catName: "홈/리빙" },
+  { tag: "#캠핑스타그램", kw: "캠핑용품", cat: "home", catName: "홈/리빙" },
+  { tag: "#육아템", kw: "유아용품", cat: "kids", catName: "유아동" },
+  { tag: "#여름물놀이", kw: "유아 물놀이", cat: "kids", catName: "유아동" },
+  { tag: "#댕댕이여름나기", kw: "강아지 쿨매트", cat: "pet", catName: "반려동물" },
+  { tag: "#펫스타그램", kw: "반려동물용품", cat: "pet", catName: "반려동물" },
+  { tag: "#가성비가전", kw: "미니가전", cat: "digital", catName: "디지털/가전" },
+  { tag: "#무선이어폰", kw: "무선이어폰", cat: "digital", catName: "디지털/가전" },
+];
+
 function mapCoupangItem(p: any, catName: string) {
   return {
     name: p.productName,
@@ -312,6 +336,36 @@ Deno.serve(async (req) => {
       const shop = await naverShop(query, parseInt(q.get("display") || "10"), q.get("sort") || "sim");
       const items = (shop.items || []).map((it: any) => mapShopItem(it, "", query));
       return json({ success: true, query, total: shop.total, data: items, fetchedAt: new Date().toISOString() });
+    }
+
+    // ===== 인스타 트렌드 (해시태그 → 네이버 상품·인기도 기반) =====
+    if (path === "/api/insta/trends") {
+      if (!naverConfigured()) return json({ error: "NAVER_API_NOT_CONFIGURED" }, 503);
+      const catKey = q.get("category") || "all";
+      const cacheKey = `insta:trends:${catKey}`;
+      const cached = await cacheGet(cacheKey, 60 * 60 * 1000); // 60분 캐시 (호출 절약)
+      if (cached) return json({ success: true, cached: true, ageMin: Math.round(cached.ageMs / 60000), data: cached.data });
+
+      // 카테고리별 인기 인스타 해시태그 → 네이버 검색어
+      const tags = catKey === "all"
+        ? INSTA_HASHTAGS.slice(0, 10)
+        : INSTA_HASHTAGS.filter((t) => t.cat === catKey);
+
+      const result: any[] = [];
+      for (const t of tags) {
+        try {
+          const shop = await naverShop(t.kw, 3, "sim");
+          const products = (shop.items || []).map((it: any) => mapShopItem(it, t.cat, t.kw));
+          result.push({
+            tag: t.tag, category: t.catName, cat: t.cat, keyword: t.kw,
+            popularity: shop.total || 0,           // 네이버 검색 결과 수 = 관심도 지표
+            products,
+          });
+        } catch (_) { /* 개별 실패 무시 */ }
+      }
+      result.sort((a, b) => b.popularity - a.popularity);
+      await cacheSet(cacheKey, result);
+      return json({ success: true, cached: false, data: result, fetchedAt: new Date().toISOString() });
     }
 
     // 알리 인기 상품
