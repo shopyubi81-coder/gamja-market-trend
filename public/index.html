@@ -51,6 +51,45 @@
   .alert-banner.hidden { display: none; }
   .alert-banner a { color: var(--primary); font-weight: 600; }
 
+  /* 🌅 아침 브리핑 */
+  .briefing { margin-bottom: 22px; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 20px rgba(255,107,44,0.15); border: 1px solid #FFE0CC; }
+  .briefing.hidden { display: none; }
+  .brief-head { background: linear-gradient(120deg, #FF6B2C, #FF9558); color: white; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .brief-head .b-title { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .brief-head .b-date { font-size: 13px; opacity: 0.95; font-weight: 500; }
+  .brief-refresh { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  .brief-refresh:hover { background: rgba(255,255,255,0.32); }
+  .brief-body { background: white; padding: 18px 22px; }
+  .brief-headline { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 16px; line-height: 1.5; }
+  .brief-headline .hl { color: var(--primary); }
+  .brief-grid { display: grid; grid-template-columns: 1.1fr 1fr 1.3fr; gap: 18px; }
+  .brief-col .b-col-title { font-size: 12px; font-weight: 700; color: var(--sub); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .brief-rank { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid #F3F4F6; }
+  .brief-rank:last-child { border-bottom: none; }
+  .brief-rank .r-num { width: 20px; height: 20px; border-radius: 6px; background: var(--bg); color: var(--sub); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .brief-rank .r-num.top { background: var(--primary); color: white; }
+  .brief-rank .r-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-rank .r-val { font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .brief-rank .r-val.up { color: var(--up); }
+  .brief-rank .r-val.same { color: var(--sub); }
+  .brief-kw { display: flex; flex-wrap: wrap; gap: 6px; }
+  .brief-kw .kw { font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 16px; background: #FFF5F0; color: var(--primary); cursor: pointer; }
+  .brief-kw .kw:hover { background: #FFE6D6; }
+  .brief-prod { display: flex; align-items: center; gap: 9px; padding: 6px 0; cursor: pointer; }
+  .brief-prod img { width: 34px; height: 34px; border-radius: 7px; object-fit: cover; flex-shrink: 0; background: var(--bg); }
+  .brief-prod .p-info { flex: 1; min-width: 0; }
+  .brief-prod .p-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-prod .p-meta { font-size: 11px; color: var(--sub); }
+  .brief-loading { padding: 24px; text-align: center; color: var(--sub); font-size: 14px; }
+  @media (max-width: 768px) {
+    .brief-grid { grid-template-columns: 1fr; gap: 16px; }
+    .brief-head { padding: 16px; }
+    .brief-head .b-title { font-size: 16px; }
+    .brief-body { padding: 16px; }
+    .brief-col { border-top: 1px solid #F3F4F6; padding-top: 12px; }
+    .brief-col:first-child { border-top: none; padding-top: 0; }
+  }
+
   .period-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
   .period-label { font-size: 13px; color: var(--sub); margin-right: 4px; font-weight: 500; }
   .period-btn { padding: 8px 20px; border-radius: 20px; border: 1.5px solid var(--border); background: white; color: var(--sub); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
@@ -332,6 +371,9 @@
     ⚠️ 네이버 API가 연결되지 않아 <strong>목업 데이터</strong>로 표시 중입니다.
     <a href="#" onclick="openSetupModal(); return false">설정 방법 보기 →</a>
   </div>
+
+  <!-- 🌅 오늘의 아침 브리핑 -->
+  <div class="briefing" id="briefing"></div>
 
   <!-- Period Selector -->
   <div class="period-bar">
@@ -683,9 +725,110 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkStatus();
   await loadSelectionsFromDB();
   render();
+  loadBriefing();   // 🌅 오늘의 아침 브리핑 (일간 전체 요약)
   if (isNaverConfigured) loadNaverData(currentPeriod, null);
   if (isAliConfigured && currentPlatform === 'china') loadAliData(null);
 });
+
+// ===== 🌅 오늘의 아침 브리핑 (일간 트렌드 전체 요약) =====
+let briefingCats = null, briefingProds = null;
+
+async function loadBriefing(force) {
+  const el = document.getElementById('briefing');
+  if (!isNaverConfigured) { el.className = 'briefing hidden'; return; }
+  el.className = 'briefing';
+  el.innerHTML = `<div class="brief-loading"><span class="spin">↻</span> 오늘의 트렌드를 모으는 중...</div>`;
+  try {
+    // 일간 카테고리 트렌드 + 대표 상품 (메인 선택과 독립적으로 항상 '일간 전체')
+    const [catRes, prodRes] = await Promise.all([
+      afetch('/api/naver/categories?period=daily').then(r => r.json()),
+      afetch('/api/naver/products').then(r => r.json()),
+    ]);
+    if (catRes.success) briefingCats = catRes.data;
+    if (prodRes.success) briefingProds = prodRes.data;
+    renderBriefing();
+  } catch (e) {
+    el.innerHTML = `<div class="brief-loading">브리핑을 불러오지 못했습니다. <a href="#" onclick="loadBriefing(true);return false" style="color:var(--primary)">다시 시도</a></div>`;
+  }
+}
+
+function renderBriefing() {
+  const el = document.getElementById('briefing');
+  if (!briefingCats || briefingCats.length === 0) { el.className = 'briefing hidden'; return; }
+
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 11 ? '좋은 아침입니다' : hour < 18 ? '안녕하세요' : '오늘도 수고하셨습니다';
+  const dateStr = now.toLocaleDateString('ko-KR', { month:'long', day:'numeric', weekday:'long' });
+  const timeStr = now.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+
+  // 급상승 카테고리 (변화율 순)
+  const rising = [...briefingCats].sort((a,b) => (b.change||0) - (a.change||0));
+  const top = rising[0];
+  const risingUp = rising.filter(c => c.trend === 'up');
+
+  // 키워드 (상품명 기반)
+  let kws = [];
+  if (briefingProds) {
+    const freq = {};
+    briefingProds.forEach(g => { if (g.searchKeyword) freq[g.searchKeyword] = (freq[g.searchKeyword]||0)+5;
+      g.items.forEach(it => { if (it.brand) freq[it.brand] = (freq[it.brand]||0)+1; }); });
+    kws = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,7).map(e=>e[0]);
+  }
+
+  // 주목 상품 (각 그룹 1위)
+  let prods = [];
+  if (briefingProds) briefingProds.forEach(g => { if (g.items[0]) prods.push({ ...g.items[0], cat: g.category }); });
+  prods = prods.slice(0, 4);
+
+  // 헤드라인 자동 생성
+  let headline = `오늘은 <span class="hl">${top.name}</span> 분야가 가장 활발합니다`;
+  if (risingUp.length >= 2) headline += ` · <span class="hl">${risingUp.slice(0,3).map(c=>c.name).join(', ')}</span> 상승세`;
+  headline += '.';
+
+  const fmtChange = (c) => c.trend === 'up' ? `▲ +${c.change}%` : c.trend === 'down' ? `▼ ${c.change}%` : '=';
+
+  el.className = 'briefing';
+  el.innerHTML = `
+    <div class="brief-head">
+      <div>
+        <div class="b-title">🌅 오늘의 트렌드 브리핑</div>
+        <div class="b-date">${greeting}, 감자마켓 MD님 · ${dateStr}</div>
+      </div>
+      <button class="brief-refresh" onclick="loadBriefing(true)">↻ ${timeStr} 기준</button>
+    </div>
+    <div class="brief-body">
+      <div class="brief-headline">📌 ${headline}</div>
+      <div class="brief-grid">
+        <div class="brief-col">
+          <div class="b-col-title">🔥 급상승 카테고리</div>
+          ${rising.slice(0,5).map((c,i) => `
+            <div class="brief-rank">
+              <div class="r-num ${i===0?'top':''}">${i+1}</div>
+              <div class="r-name">${c.name}</div>
+              <div class="r-val ${c.trend==='up'?'up':'same'}">${fmtChange(c)}</div>
+            </div>`).join('')}
+        </div>
+        <div class="brief-col">
+          <div class="b-col-title">🔑 핫 키워드</div>
+          ${kws.length ? `<div class="brief-kw">${kws.map(k=>`<span class="kw" onclick="searchKeyword('${k}')">#${k}</span>`).join('')}</div>`
+            : `<div style="font-size:12px;color:var(--sub)">상품 로딩 중...</div>`}
+        </div>
+        <div class="brief-col">
+          <div class="b-col-title">🛒 주목 상품</div>
+          ${prods.length ? prods.map(p => `
+            <div class="brief-prod" onclick="window.open('${p.link}','_blank')">
+              ${p.image ? `<img src="${p.image}" />` : '<div class="brief-prod-noimg">🛒</div>'}
+              <div class="p-info">
+                <div class="p-name">${p.name}</div>
+                <div class="p-meta">${p.category} · ${p.priceText}</div>
+              </div>
+            </div>`).join('')
+            : `<div style="font-size:12px;color:var(--sub)">상품 로딩 중...</div>`}
+        </div>
+      </div>
+    </div>`;
+}
 
 // ===== Supabase 선별목록 동기화 =====
 async function loadSelectionsFromDB() {
