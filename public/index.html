@@ -1532,6 +1532,9 @@ function renderCoupangPanel(periodLabel) {
       <button class="refresh-btn" onclick="loadCoupangData(this)">↻ 새로고침</button>
     </div>`;
 
+  if (isReal) {
+    html += `<div style="padding:9px 20px 0; font-size:11px; color:var(--sub)">📌 쿠팡은 <b>'현재' 인기 기준</b>입니다 (일/주/월/년 기간 선택과 무관 — 쿠팡 API가 기간별 데이터를 제공하지 않음)</div>`;
+  }
   if (!isCoupangConfigured && !isReal) {
     html += `<div style="padding:10px 20px 0; font-size:12px; color:var(--sub)">
       ⚠️ 목업 데이터 · <a href="#" onclick="openSetupModal(); return false" style="color:var(--primary)">쿠팡 API 연결하기</a> (키 입력 시 실시간 전환)
@@ -1631,7 +1634,7 @@ function renderInstaPanel(periodLabel) {
 
   // 실데이터: 해시태그 순위 + 인기도 막대 + 관련 상품
   const maxPop = Math.max(...instaLiveData.map(t => t.popularity), 1);
-  html += `<div style="padding:8px 20px 0; font-size:11px; color:var(--sub)">📊 인기도 = 네이버 검색 상품 수 (관심도 지표) · 60분 캐시</div>`;
+  html += `<div style="padding:8px 20px 0; font-size:11px; color:var(--sub)">📊 인기도 = 네이버 검색 상품 수 (관심도 지표) · 📌 '현재' 기준 (기간 선택과 무관) · 60분 캐시</div>`;
   html += `<div class="trend-list">`;
   instaLiveData.forEach((t, idx) => {
     const pct = Math.round((t.popularity / maxPop) * 100);
