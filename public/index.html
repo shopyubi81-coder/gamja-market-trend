@@ -1550,6 +1550,20 @@ function renderCoupangPanel(periodLabel) {
 
 function renderInstaPanel(periodLabel) {
   const isReal = instaLiveData && instaLiveData.length > 0;
+  // 네이버 연결됐는데 아직 실데이터 전이면: 목업 대신 로딩 표시 + 자동 로드
+  if (isNaverConfigured && !isReal) {
+    if (!window._igLoading) {
+      window._igLoading = true;
+      setTimeout(() => { loadInstaData(null).finally(() => { window._igLoading = false; }); }, 30);
+    }
+    return `<div class="trend-panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="panel-platform-badge badge-instagram">인스타그램</span> 인기 해시태그 <span class="live-badge">네이버 기반</span></div>
+        <button class="refresh-btn" onclick="loadInstaData(this)">↻ 새로고침</button>
+      </div>
+      <div class="empty-state"><div class="icon">📷</div><p>인스타 해시태그 트렌드를 불러오는 중...</p></div>
+    </div>`;
+  }
   let html = `<div class="trend-panel">
     <div class="panel-header">
       <div class="panel-title">
