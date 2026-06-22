@@ -249,6 +249,22 @@
   .opp-track div { height: 100%; border-radius: 4px; }
   .opp-signal { font-size: 11.5px; font-weight: 600; color: var(--text); background: var(--bg); border-radius: 7px; padding: 6px 9px; line-height: 1.35; }
 
+  /* 리뷰 분석 결과 */
+  .rev-sum-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin-bottom: 6px; }
+  .rev-sum-bar div { height: 100%; }
+  .rev-sum-leg { display: flex; gap: 12px; font-size: 12px; font-weight: 600; margin-bottom: 16px; flex-wrap: wrap; }
+  .rev-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .rev-cols { grid-template-columns: 1fr; } }
+  .rev-h { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .rev-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rev-chip { font-size: 12px; padding: 5px 10px; border-radius: 14px; font-weight: 600; }
+  .rev-chip b { font-weight: 800; margin-left: 2px; }
+  .rev-chip.pos { background: #E7F6EE; color: #0F9D58; }
+  .rev-chip.neg { background: #FEE2E2; color: #EF4444; }
+  .rev-cloud { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; padding: 6px 0; }
+  .rev-cloud span { font-weight: 700; color: var(--text); }
+  .rev-insight { margin-top: 16px; background: #FFF9F5; border-left: 4px solid var(--primary); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--text); }
+
   .empty-state { text-align: center; padding: 40px 20px; color: var(--sub); }
   .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
   .empty-state p { font-size: 14px; }
@@ -403,6 +419,7 @@
   <div class="header-right">
     <span class="api-status warn" id="apiStatusBadge">⚙️ 설정 필요</span>
     <div class="date-badge" id="currentDate"></div>
+    <div class="report-btn" onclick="openReviewAnalyzer()">📝<span class="badge-long"> 리뷰분석</span></div>
     <div class="report-btn" onclick="openReport()">📑<span class="badge-long"> 보고서</span></div>
     <div class="selected-count-badge" onclick="openDrawer()">
       📋<span class="badge-long"> 선별 목록</span> <span id="selectedCountBadge">0</span><span class="badge-long">개</span>
@@ -579,6 +596,28 @@
     <div class="report-foot">
       <button class="btn-outline" onclick="generateReport(this)">🔄 지금 새로 생성</button>
       <button class="btn-primary" style="flex:none" onclick="closeReport()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 리뷰 분석기 모달 -->
+<div class="report-overlay" id="reviewOverlay" onclick="if(event.target===this)closeReviewAnalyzer()">
+  <div class="report-modal">
+    <div class="report-top" style="background:linear-gradient(120deg,#0F9D58,#34C77B)">
+      <div>
+        <div class="rt-title">📝 리뷰 분석기</div>
+        <div class="rt-date">리뷰를 붙여넣으면 긍정·부정 키워드를 뽑아줍니다 · 무료(AI 미사용)</div>
+      </div>
+      <button class="rt-close" onclick="closeReviewAnalyzer()">✕</button>
+    </div>
+    <div class="report-body">
+      <input id="revProduct" class="note-area" style="min-height:auto;margin-bottom:10px" placeholder="상품명 (선택) — 예: 캠핑 선풍기" />
+      <textarea id="revInput" class="note-area" style="min-height:140px" placeholder="여기에 리뷰를 붙여넣으세요. 리뷰 한 건당 한 줄(엔터)로 구분하면 더 정확합니다.&#10;예)&#10;소음이 거의 없어서 너무 좋아요. 배터리도 오래가고 가성비 최고.&#10;무게가 좀 무겁고 충전이 느린 게 아쉬워요."></textarea>
+      <div id="revResult" style="margin-top:16px"></div>
+    </div>
+    <div class="report-foot">
+      <button class="btn-outline" onclick="document.getElementById('revInput').value='';document.getElementById('revResult').innerHTML='';">지우기</button>
+      <button class="btn-primary" style="flex:none" onclick="analyzeReviews()">🔍 분석하기</button>
     </div>
   </div>
 </div>
@@ -1951,6 +1990,64 @@ function showToast(msg) {
 }
 
 // ===== 일일 종합 보고서 =====
+// ===== 리뷰 분석기 (코드 기반 빈도분석, 무료·토큰0) =====
+function openReviewAnalyzer() { document.getElementById('reviewOverlay').classList.add('open'); }
+function closeReviewAnalyzer() { document.getElementById('reviewOverlay').classList.remove('open'); }
+
+const REV_POS = ['좋','만족','최고','가성비','저렴','싸','빠르','튼튼','편하','편리','부드','조용','가벼','예쁘','이쁘','깔끔','우수','추천','괜찮','강추','굿','훌륭','선명','넉넉','시원','마음에','대박','완벽','감동','짱','신세계','재구매'];
+const REV_NEG = ['별로','불만','아쉽','무겁','느리','약하','고장','불편','시끄','비싸','떨어','부족','최악','실망','안좋','깨','흠집','후회','짧','불량','냄새','늦','안되','문제','하자','불안','거슬','버벅','끊','환불','반품'];
+const REV_STOP = new Set(['그리고','근데','그런데','하지만','그냥','정말','너무','조금','약간','진짜','완전','계속','아주','매우','다시','이거','저거','그거','제품','상품','구매','구입','사용','배송','후기','리뷰','정도','생각','때문','이런','저런','부분','사진','이번','처음','이제','거의','및','등','중','구성','하나','사람','경우','우리']);
+const REV_LABEL = {좋:'좋음',만족:'만족',최고:'최고',가성비:'가성비',저렴:'저렴',싸:'저렴',빠르:'빠름',튼튼:'튼튼함',편하:'편함',편리:'편리',부드:'부드러움',조용:'조용함',가벼:'가벼움',예쁘:'예쁨',이쁘:'예쁨',깔끔:'깔끔함',추천:'추천',괜찮:'괜찮음',강추:'강력추천',선명:'선명함',넉넉:'넉넉함',시원:'시원함',완벽:'완벽함',감동:'감동',재구매:'재구매의사',별로:'별로',불만:'불만',아쉽:'아쉬움',무겁:'무거움',느리:'느림',약하:'약함',고장:'고장',불편:'불편',시끄:'시끄러움',비싸:'비쌈',떨어:'품질저하',부족:'부족함',최악:'최악',실망:'실망',깨:'파손',흠집:'흠집',후회:'후회',짧:'짧음',불량:'불량',냄새:'냄새',늦:'늦음',문제:'문제',하자:'하자',끊:'끊김',환불:'환불',반품:'반품'};
+
+function revTokenize(text) {
+  return text.split(/[\s,.!?~"'()\[\]·…\/\-\n]+/)
+    .map(w => w.replace(/(이|가|을|를|은|는|에|의|도|만|와|과|로|으로|에서|까지|부터|에게|네요|어요|아요|습니다|했어요|해요|예요|이에요)$/, ''))
+    .map(w => w.replace(/[^가-힣a-zA-Z0-9]/g, ''))
+    .filter(w => w.length >= 2 && !REV_STOP.has(w));
+}
+
+function analyzeReviews() {
+  const raw = (document.getElementById('revInput').value || '').trim();
+  const out = document.getElementById('revResult');
+  if (!raw) { out.innerHTML = '<div style="color:var(--sub);font-size:13px">리뷰를 먼저 붙여넣어 주세요.</div>'; return; }
+  let reviews = raw.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  if (reviews.length < 2) reviews = raw.split(/[.!?]\s+/).map(s => s.trim()).filter(Boolean);
+
+  const has = (text, stems) => stems.filter(st => text.includes(st));
+  let pos = 0, neg = 0;
+  const posFreq = {}, negFreq = {}, wordFreq = {};
+  reviews.forEach(r => {
+    const ph = has(r, REV_POS), nh = has(r, REV_NEG);
+    ph.forEach(s => posFreq[s] = (posFreq[s] || 0) + 1);
+    nh.forEach(s => negFreq[s] = (negFreq[s] || 0) + 1);
+    if (ph.length > nh.length) pos++; else if (nh.length > ph.length) neg++;
+    revTokenize(r).forEach(w => wordFreq[w] = (wordFreq[w] || 0) + 1);
+  });
+  const top = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
+  const total = reviews.length;
+  const posPct = Math.round(pos / total * 100), negPct = Math.round(neg / total * 100), neuPct = Math.max(0, 100 - posPct - negPct);
+  const chips = (arr, cls) => arr.length ? arr.map(([k, v]) => `<span class="rev-chip ${cls}">${REV_LABEL[k] || k} <b>${v}</b></span>`).join('') : '<span style="font-size:12px;color:var(--sub)">감지된 키워드 없음</span>';
+
+  let html = `<div class="rev-sum-bar"><div style="width:${posPct}%;background:#0F9D58"></div><div style="width:${neuPct}%;background:#D1D5DB"></div><div style="width:${negPct}%;background:#EF4444"></div></div>
+    <div class="rev-sum-leg"><span style="color:#0F9D58">😊 긍정 ${posPct}%</span><span style="color:#6B7280">😐 중립 ${neuPct}%</span><span style="color:#EF4444">😟 부정 ${negPct}%</span><span style="margin-left:auto;color:var(--sub)">총 ${total}건</span></div>`;
+  html += `<div class="rev-cols">
+    <div><div class="rev-h" style="color:#0F9D58">👍 좋아하는 점</div><div class="rev-chips">${chips(top(posFreq, 8), 'pos')}</div></div>
+    <div><div class="rev-h" style="color:#EF4444">👎 불만 요인</div><div class="rev-chips">${chips(top(negFreq, 8), 'neg')}</div></div>
+  </div>`;
+  const wc = top(wordFreq, 18); const maxW = wc.length ? wc[0][1] : 1;
+  html += `<div class="rev-h" style="margin-top:14px">☁️ 자주 나온 단어</div><div class="rev-cloud">${wc.map(([w, c]) => { const sz = 12 + Math.round(c / maxW * 11); return `<span style="font-size:${sz}px;opacity:${(0.55 + c / maxW * 0.45).toFixed(2)}">${w}</span>`; }).join('')}</div>`;
+
+  const tPos = top(posFreq, 1)[0], tNeg = top(negFreq, 1)[0];
+  if (tPos || tNeg) {
+    html += `<div class="rev-insight">💡 <b>MD 인사이트</b>: `
+      + (tPos ? `고객은 <b>${REV_LABEL[tPos[0]] || tPos[0]}</b>을(를) 가장 좋아함` : '')
+      + (tNeg ? `${tPos ? ', ' : ''}<b>${REV_LABEL[tNeg[0]] || tNeg[0]}</b>이(가) 최대 불만 → 이걸 개선한 상품이 <b>차별화 포인트</b>` : '')
+      + `</div>`;
+  }
+  out.innerHTML = html;
+  showToast(`리뷰 ${total}건 분석 완료 (무료) ✓`);
+}
+
 function openReport() {
   document.getElementById('reportOverlay').classList.add('open');
   loadReport();
