@@ -241,6 +241,74 @@ async function aliCall(method: string, biz: Record<string, string>) {
   return await r.json();
 }
 
+// ===== 일일 종합 보고서 =====
+function todayKST() {
+  const d = new Date(Date.now() + 9 * 3600 * 1000); // KST
+  return d.toISOString().slice(0, 10);
+}
+
+async function buildReport() {
+  const date = todayKST();
+  const report: any = { date, generatedAt: new Date().toISOString(), naver: null, coupang: null, insta: null, keywords: [], rising: [], falling: [] };
+
+  // 1) 네이버 카테고리 트렌드 (일간)
+  try {
+    const cats = await naverCategoryTrend("daily");
+    const ranked = cats.map((r: any) => {
+      const latest = r.data[r.data.length - 1];
+      const prev = r.data[r.data.length - 2];
+      const ratio = latest?.ratio || 0;
+      const prevRatio = prev?.ratio || ratio;
+      const change = prevRatio > 0 ? +((ratio - prevRatio) / prevRatio * 100).toFixed(1) : 0;
+      return { name: r.title, ratio: +ratio.toFixed(1), change, trend: change > 3 ? "up" : change < -3 ? "down" : "same" };
+    }).sort((a: any, b: any) => b.ratio - a.ratio);
+    report.naver = ranked;
+    report.rising = ranked.filter((c: any) => c.trend === "up").sort((a: any, b: any) => b.change - a.change).slice(0, 3);
+    report.falling = ranked.filter((c: any) => c.trend === "down").sort((a: any, b: any) => a.change - b.change).slice(0, 3);
+  } catch (_) { /* skip */ }
+
+  // 2) 쿠팡 골드박스 TOP 5
+  if (coupangConfigured()) {
+    try {
+      const gb = await coupangCall(`${CPATH}/goldbox`);
+      report.coupang = (gb.data || []).slice(0, 5).map((p: any) => mapCoupangItem(p, ""));
+    } catch (_) { /* skip */ }
+  }
+
+  // 3) 인스타 핫 해시태그 TOP 6 (네이버 인기도)
+  try {
+    const tagRes: any[] = [];
+    for (const t of INSTA_HASHTAGS.slice(0, 8)) {
+      try { const shop = await naverShop(t.kw, 1, "sim"); tagRes.push({ tag: t.tag, keyword: t.kw, category: t.catName, popularity: shop.total || 0 }); } catch (_) { /* */ }
+    }
+    report.insta = tagRes.sort((a, b) => b.popularity - a.popularity).slice(0, 6);
+    report.keywords = report.insta.map((t: any) => t.tag.replace("#", "")).slice(0, 8);
+  } catch (_) { /* skip */ }
+
+  return report;
+}
+
+async function saveReport(report: any) {
+  if (!SB_URL || !SB_SERVICE_KEY) return;
+  await fetch(`${SB_URL}/rest/v1/daily_report?on_conflict=date`, {
+    method: "POST",
+    headers: {
+      apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}`,
+      "Content-Type": "application/json", Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify({ date: report.date, data: report, created_at: new Date().toISOString() }),
+  });
+}
+
+async function getLatestReport() {
+  if (!SB_URL || !SB_SERVICE_KEY) return null;
+  const r = await fetch(`${SB_URL}/rest/v1/daily_report?select=data&order=date.desc&limit=1`, {
+    headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` },
+  });
+  const rows = await r.json();
+  return Array.isArray(rows) && rows[0] ? rows[0].data : null;
+}
+
 // ===== 라우터 =====
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -252,6 +320,20 @@ Deno.serve(async (req) => {
   try {
     if (path === "/api/status") {
       return json({ naverConfigured: naverConfigured(), aliConfigured: aliConfigured(), coupangConfigured: coupangConfigured(), serverTime: new Date().toISOString() });
+    }
+
+    // ===== 일일 보고서 생성 (cron 또는 수동) =====
+    if (path === "/api/report/generate") {
+      if (!naverConfigured()) return json({ error: "NAVER_API_NOT_CONFIGURED" }, 503);
+      const report = await buildReport();
+      await saveReport(report);
+      return json({ success: true, data: report });
+    }
+
+    // ===== 최신 보고서 조회 =====
+    if (path === "/api/report/latest") {
+      const report = await getLatestReport();
+      return json({ success: true, data: report });
     }
 
     // ===== 쿠팡 골드박스 (오늘의 특가/인기) =====

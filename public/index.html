@@ -43,6 +43,34 @@
   .api-status.warn { background: #FEF3C7; color: #92400E; }
   .selected-count-badge { background: var(--primary); color: white; border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
   .selected-count-badge:hover { background: var(--primary-light); }
+  .report-btn { background: white; border: 1.5px solid var(--primary); color: var(--primary); border-radius: 20px; padding: 5px 13px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .report-btn:hover { background: #FFF5F0; }
+
+  /* 보고서 모달 */
+  .report-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px; }
+  .report-overlay.open { display: flex; }
+  .report-modal { background: white; border-radius: 20px; max-width: 760px; width: 100%; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+  .report-top { background: linear-gradient(120deg, #1A1A2E, #2D2D5A); color: white; padding: 22px 26px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .report-top .rt-title { font-size: 19px; font-weight: 800; }
+  .report-top .rt-date { font-size: 13px; opacity: 0.85; margin-top: 3px; }
+  .report-top .rt-close { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; cursor: pointer; }
+  .report-body { padding: 22px 26px; max-height: 70vh; overflow-y: auto; }
+  .rep-sec { margin-bottom: 22px; }
+  .rep-sec-title { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 12px; padding-bottom: 7px; border-bottom: 2px solid var(--bg); display: flex; align-items: center; gap: 7px; }
+  .rep-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; border-bottom: 1px solid #F3F4F6; }
+  .rep-row:last-child { border-bottom: none; }
+  .rep-row .rr-rank { width: 22px; height: 22px; border-radius: 6px; background: var(--bg); font-size: 11px; font-weight: 700; color: var(--sub); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .rep-row .rr-rank.t { background: var(--primary); color: white; }
+  .rep-row .rr-name { flex: 1; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rep-row .rr-val { font-weight: 700; flex-shrink: 0; }
+  .rep-row .rr-val.up { color: var(--up); } .rep-row .rr-val.down { color: var(--down); } .rep-row .rr-val.same { color: var(--sub); }
+  .rep-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 600px) { .rep-cols { grid-template-columns: 1fr; } }
+  .rep-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .rep-chip { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 16px; background: #FFF5F0; color: var(--primary); }
+  .rep-summary { background: var(--bg); border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6; color: var(--text); margin-bottom: 20px; border-left: 4px solid var(--primary); }
+  .report-foot { padding: 14px 26px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .rep-loading { padding: 50px 20px; text-align: center; color: var(--sub); }
 
   .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
 
@@ -357,6 +385,7 @@
   <div class="header-right">
     <span class="api-status warn" id="apiStatusBadge">⚙️ 설정 필요</span>
     <div class="date-badge" id="currentDate"></div>
+    <div class="report-btn" onclick="openReport()">📑<span class="badge-long"> 보고서</span></div>
     <div class="selected-count-badge" onclick="openDrawer()">
       📋<span class="badge-long"> 선별 목록</span> <span id="selectedCountBadge">0</span><span class="badge-long">개</span>
     </div>
@@ -514,6 +543,24 @@
     <div class="modal-footer">
       <button class="btn-outline" onclick="closeSetupModal()">닫기</button>
       <button class="btn-primary" onclick="checkStatus()">연결 상태 확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 보고서 모달 -->
+<div class="report-overlay" id="reportOverlay" onclick="if(event.target===this)closeReport()">
+  <div class="report-modal">
+    <div class="report-top">
+      <div>
+        <div class="rt-title">📑 오늘의 트렌드 종합 보고서</div>
+        <div class="rt-date" id="reportDate"></div>
+      </div>
+      <button class="rt-close" onclick="closeReport()">✕</button>
+    </div>
+    <div class="report-body" id="reportBody"></div>
+    <div class="report-foot">
+      <button class="btn-outline" onclick="generateReport(this)">🔄 지금 새로 생성</button>
+      <button class="btn-primary" style="flex:none" onclick="closeReport()">닫기</button>
     </div>
   </div>
 </div>
@@ -1720,6 +1767,89 @@ function showToast(msg) {
   t.textContent = msg; t.classList.add('show');
   clearTimeout(window._tt);
   window._tt = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ===== 일일 종합 보고서 =====
+function openReport() {
+  document.getElementById('reportOverlay').classList.add('open');
+  loadReport();
+}
+function closeReport() { document.getElementById('reportOverlay').classList.remove('open'); }
+
+async function loadReport() {
+  const body = document.getElementById('reportBody');
+  body.innerHTML = `<div class="rep-loading">📑 보고서를 불러오는 중...</div>`;
+  if (!SUPA_OK) { body.innerHTML = `<div class="rep-loading">서버(Supabase) 연결이 필요합니다.</div>`; return; }
+  try {
+    const res = await afetch('/api/report/latest');
+    const json = await res.json();
+    if (json.success && json.data) { renderReport(json.data); }
+    else { body.innerHTML = `<div class="rep-loading">아직 생성된 보고서가 없습니다.<br><br><button class="btn-primary" style="flex:none" onclick="generateReport(this)">🔄 지금 첫 보고서 생성</button></div>`; }
+  } catch (e) { body.innerHTML = `<div class="rep-loading">불러오기 실패: ${e.message}</div>`; }
+}
+
+async function generateReport(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '생성 중... (10~20초)'; }
+  const body = document.getElementById('reportBody');
+  body.innerHTML = `<div class="rep-loading">📊 4개 채널을 종합 분석 중입니다... (10~20초)</div>`;
+  try {
+    const res = await afetch('/api/report/generate');
+    const json = await res.json();
+    if (json.success && json.data) { renderReport(json.data); showToast('보고서 생성 완료 ✓'); }
+    else { body.innerHTML = `<div class="rep-loading">생성 실패: ${json.message || json.error}</div>`; }
+  } catch (e) { body.innerHTML = `<div class="rep-loading">생성 실패: ${e.message}</div>`; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '🔄 지금 새로 생성'; } }
+}
+
+function renderReport(r) {
+  document.getElementById('reportDate').textContent = `${r.date} 기준 · ${r.generatedAt ? new Date(r.generatedAt).toLocaleString('ko-KR') : ''} 생성`;
+  const body = document.getElementById('reportBody');
+  let html = '';
+
+  // 요약 한 줄
+  const topRise = (r.rising && r.rising[0]) ? r.rising[0] : null;
+  const topCat = (r.naver && r.naver[0]) ? r.naver[0] : null;
+  if (topCat) {
+    html += `<div class="rep-summary">📌 오늘 네이버에서 가장 활발한 분야는 <b>${topCat.name}</b>(지수 ${topCat.ratio})입니다.`
+      + (topRise ? ` 급상승 분야는 <b>${topRise.name}</b>(▲${topRise.change}%) — 관련 상품 발주를 검토해보세요.` : '') + `</div>`;
+  }
+
+  // 통합 핫 키워드
+  if (r.keywords && r.keywords.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">🔑 오늘의 핫 키워드</div><div class="rep-chips">${r.keywords.map(k=>`<span class="rep-chip" onclick="closeReport();searchKeyword('${k}')" style="cursor:pointer">#${k}</span>`).join('')}</div></div>`;
+  }
+
+  html += `<div class="rep-cols">`;
+  // 급상승 / 하락
+  html += `<div class="rep-sec"><div class="rep-sec-title">⬆️ 급상승 분야</div>`;
+  html += (r.rising && r.rising.length) ? r.rising.map((c,i)=>`<div class="rep-row"><div class="rr-rank ${i===0?'t':''}">${i+1}</div><div class="rr-name">${c.name}</div><div class="rr-val up">▲${c.change}%</div></div>`).join('') : `<div style="font-size:12px;color:var(--sub)">없음</div>`;
+  html += `</div>`;
+  html += `<div class="rep-sec"><div class="rep-sec-title">⬇️ 하락 분야</div>`;
+  html += (r.falling && r.falling.length) ? r.falling.map((c,i)=>`<div class="rep-row"><div class="rr-rank">${i+1}</div><div class="rr-name">${c.name}</div><div class="rr-val down">▼${Math.abs(c.change)}%</div></div>`).join('') : `<div style="font-size:12px;color:var(--sub)">없음</div>`;
+  html += `</div></div>`;
+
+  // 네이버 카테고리 트렌드 전체
+  if (r.naver && r.naver.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">🟢 네이버 카테고리 트렌드</div>`;
+    html += r.naver.map((c,i)=>`<div class="rep-row"><div class="rr-rank ${i<3?'t':''}">${i+1}</div><div class="rr-name">${c.name}</div><div class="rr-val ${c.trend}">${c.ratio}</div></div>`).join('');
+    html += `</div>`;
+  }
+
+  // 쿠팡 골드박스
+  if (r.coupang && r.coupang.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">🛒 쿠팡 골드박스 TOP</div>`;
+    html += r.coupang.map((p,i)=>`<div class="rep-row"><div class="rr-rank ${i<3?'t':''}">${i+1}</div><div class="rr-name">${p.name}</div><div class="rr-val">${p.priceText}</div></div>`).join('');
+    html += `</div>`;
+  }
+
+  // 인스타 해시태그
+  if (r.insta && r.insta.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">📷 인스타 핫 해시태그</div>`;
+    html += r.insta.map((t,i)=>`<div class="rep-row"><div class="rr-rank ${i<3?'t':''}">${i+1}</div><div class="rr-name">${t.tag}</div><div class="rr-val">${(t.popularity).toLocaleString()}</div></div>`).join('');
+    html += `</div>`;
+  }
+
+  body.innerHTML = html || `<div class="rep-loading">표시할 데이터가 없습니다.</div>`;
 }
 </script>
 </body>
