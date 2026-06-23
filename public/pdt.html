@@ -479,7 +479,7 @@ const DEMO_SEED = [
   {name:'휴대용 선풍기',rating:'4.5',reviews:4321,price:21000,growth:18,score:65},
   {name:'접이식 캠핑 선풍기',rating:'4.4',reviews:3210,price:15000,growth:15,score:58},
 ];
-const state = { query:'캠핑 선풍기', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false };
+const state = { query:'캠핑 선풍기', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false, period:'monthly' };
 const PLIST_MIN = 6;   // ① 기본 표시 개수(나머지는 '더 보기')
 
 // 검색어 → DataLab 7대 카테고리 매핑(카테고리 트렌드 실데이터 연결용)
@@ -498,7 +498,7 @@ function matchCat(q){ for(const [re,c] of CAT_MATCH) if(re.test(q)) return c; re
 async function loadTrend(){
   if(!cfgOK){ state.catData=null; applyTrend(state.query); return; }
   try{
-    const r=await afetch('/api/naver/categories?period=monthly'); const j=await r.json();
+    const r=await afetch('/api/naver/categories?period='+state.period); const j=await r.json();
     state.catData = (j && j.success && Array.isArray(j.data) && j.data.length) ? j.data : null;
   }catch(e){ state.catData=null; }
   await setTrendFor(state.query);   // 검색어 트렌드 우선, 없으면 카테고리 폴백
@@ -510,7 +510,7 @@ async function loadKwTrend(text){
   if(!cfgOK){ state.kwCache[text]=null; return null; }
   try{
     const cat=matchCat(text);
-    const r=await afetch(`/api/naver/keywords?q=${encodeURIComponent(text)}&cat=${encodeURIComponent(cat)}&period=monthly`);
+    const r=await afetch(`/api/naver/keywords?q=${encodeURIComponent(text)}&cat=${encodeURIComponent(cat)}&period=${state.period}`);
     // 검색어 DataLab은 희소할 때가 많음 → 5포인트 이상 풍부할 때만 사용, 아니면 카테고리 폴백
     if(r.ok){ const j=await r.json(); if(j&&j.success&&Array.isArray(j.data)&&j.data.length>=5){ state.kwCache[text]=j.data; return j.data; } }
   }catch(e){}
@@ -594,8 +594,10 @@ function setTab(t, btn){
 }
 function tabnote(s){ return `<div class="tabnote">${s}</div>`; }
 function trendChartsHTML(){
+  const segs=[['일','daily'],['주','weekly'],['월','monthly'],['년','yearly']];
+  const seg=`<span class="seg">${segs.map(([l,v])=>`<span class="${state.period===v?'on':''}" onclick="setPeriod('${v}')">${l}</span>`).join('')}</span>`;
   return `<div class="charts">
-    <div class="chart"><h6><span>검색량 추이 <span id="ch1tag" class="pill a" style="font-size:8px">데모</span></span> <span class="seg"><span>일</span><span>주</span><span class="on">월</span><span>년</span></span></h6><div id="ch1" class="plot"></div><div class="axis" id="ax1"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
+    <div class="chart"><h6><span>검색량 추이 <span id="ch1tag" class="pill a" style="font-size:8px">데모</span></span> ${seg}</h6><div id="ch1" class="plot"></div><div class="axis" id="ax1"></div></div>
     <div class="chart"><h6>리뷰 수 추이 <span class="pill a" style="font-size:8px">데모</span></h6><div id="ch2" class="plot"></div><div class="axis" id="ax2"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
     <div class="chart"><h6>판매 추정 추이 <span class="pill a" style="font-size:8px">데모</span></h6><div id="ch3" class="plot"></div><div class="axis" id="ax3"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
   </div>`;
@@ -946,7 +948,21 @@ function spark(el, vals, color){
 // 추이 차트: 검색량=카테고리 DataLab 실데이터, 리뷰/판매=데모(실원천 없음)
 function setAxis(id, pts){
   const el=document.getElementById(id); if(!el)return;
-  el.innerHTML=pts.map(p=>{ const m=(p.period||'').slice(5,7); return `<span>${m?(+m)+'월':''}</span>`; }).join('');
+  const monthly = state.period==='monthly'||state.period==='yearly';
+  el.innerHTML=pts.map(p=>{ const d=(p.period||''); let lbl='';
+    if(monthly){ const m=d.slice(5,7); lbl=m?(+m)+'월':''; }
+    else if(d.length>=10){ lbl=(+d.slice(5,7))+'/'+(+d.slice(8,10)); }   // 일/주: M/D
+    return `<span>${lbl}</span>`; }).join('');
+}
+// 일/주/월/년 전환 — 해당 기간으로 트렌드 재조회
+async function setPeriod(p){
+  if(state.period===p) return;
+  state.period=p; state.catData=null; state.kwCache={};
+  const tag=document.getElementById('ch1tag'); if(tag){ tag.className='pill a'; tag.textContent='불러오는 중…'; }
+  if(cfgOK){ try{ const r=await afetch('/api/naver/categories?period='+p); const j=await r.json(); if(j&&j.success) state.catData=j.data; }catch(e){} }
+  const subj=(state.products[state.selected]||{}).name||state.query;
+  await setTrendFor(subj);
+  renderTabBody();
 }
 function renderCharts(){
   const tag=document.getElementById('ch1tag');
@@ -1094,11 +1110,7 @@ function rtab(btn,which){
   btn.classList.add('on');
 }
 // ── 탭/세그 활성 토글(시각용)
-// 세그(일/주/월/년)는 탭 본문에서 동적 생성 → 위임 처리(시각용)
-document.addEventListener('click', e=>{
-  const sp=e.target.closest('.seg span'); if(!sp || sp.classList.contains('seg')) return;
-  sp.parentElement.querySelectorAll('span').forEach(t=>t.classList.remove('on')); sp.classList.add('on');
-});
+// (일/주/월/년 세그는 onclick=setPeriod로 실제 재조회)
 
 // ── 초기화: 네이버 상태 확인 후 기본 검색어로 실데이터 로드(실패 시 데모)
 (async function init(){
