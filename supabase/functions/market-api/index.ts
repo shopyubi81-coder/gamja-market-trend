@@ -209,6 +209,24 @@ async function naverShop(query: string, display = 5, sort = "sim") {
   return await r.json();
 }
 
+// 검색어(키워드) 쇼핑 트렌드 — DataLab shopping/category/keywords (카테고리 cid 필수)
+async function naverKeywordTrend(keyword: string, period: string, cid: string) {
+  const { startDate, endDate } = periodDates(period);
+  const timeUnit = period === "daily" ? "date" : period === "weekly" ? "week" : "month";
+  const body = {
+    startDate, endDate, timeUnit,
+    category: cid,
+    keyword: [{ name: keyword, param: [keyword] }],
+    device: "", ages: [], gender: "",
+  };
+  const r = await fetch("https://openapi.naver.com/v1/datalab/shopping/category/keywords", {
+    method: "POST", headers: naverHeaders, body: JSON.stringify(body),
+  });
+  const data = await r.json();
+  if (!data.results) throw new Error(data.errorMessage || JSON.stringify(data));
+  return data.results[0]; // { title, keyword, data: [{ period, ratio }] }
+}
+
 function mapShopItem(it: any, catName: string, kw: string) {
   const lo = parseInt(it.lprice) || 0;
   const hi = parseInt(it.hprice) || 0;
@@ -483,6 +501,23 @@ Deno.serve(async (req) => {
       const shop = await naverShop(query, parseInt(q.get("display") || "10"), q.get("sort") || "sim");
       const items = (shop.items || []).map((it: any) => mapShopItem(it, "", query));
       return json({ success: true, query, total: shop.total, data: items, fetchedAt: new Date().toISOString() });
+    }
+
+    // 네이버 검색어(키워드) 쇼핑 트렌드 — DataLab (카테고리 cid 필요)
+    if (path === "/api/naver/keywords") {
+      if (!naverConfigured()) return json({ error: "NAVER_API_NOT_CONFIGURED" }, 503);
+      const kw = q.get("q");
+      if (!kw) return json({ error: "q required" }, 400);
+      const period = q.get("period") || "monthly";
+      const catName = q.get("cat") || "";
+      const found = NAVER_CATEGORIES.find((c) => c.name === catName);
+      const cid = (found || NAVER_CATEGORIES.find((c) => c.name === "디지털/가전") || NAVER_CATEGORIES[0]).code;
+      const row = await naverKeywordTrend(kw, period, cid);
+      return json({
+        success: true, keyword: kw, category: found ? found.name : "디지털/가전",
+        data: (row?.data || []).map((d: any) => ({ period: d.period, ratio: d.ratio })),
+        fetchedAt: new Date().toISOString(),
+      });
     }
 
     // ===== 인스타 트렌드 (해시태그 → 네이버 상품·인기도 기반) =====

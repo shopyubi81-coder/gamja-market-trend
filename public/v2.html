@@ -1,0 +1,2904 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#FF6B2C" />
+<title>감자마켓 PDT · 상품 발굴 터미널</title>
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --primary: #FF6B2C;
+    --primary-light: #FF8F5A;
+    --bg: #F7F8FA;
+    --card: #FFFFFF;
+    --text: #1A1A2E;
+    --sub: #6B7280;
+    --border: #E5E7EB;
+    --coupang: #E4393C;
+    --naver: #03C75A;
+    --insta: #C13584;
+    --china: #FF4747;
+    --up: #EF4444;
+    --down: #3B82F6;
+    --new: #8B5CF6;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+
+  header {
+    background: white; border-bottom: 1px solid var(--border);
+    padding: 0 24px; display: flex; align-items: center; justify-content: space-between;
+    height: 60px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+  }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--primary); }
+  .logo-icon { width: 32px; height: 32px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .date-badge { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-size: 13px; color: var(--sub); font-weight: 500; }
+  .api-status { font-size: 11px; padding: 4px 10px; border-radius: 10px; font-weight: 600; }
+  .api-status.ok { background: #D1FAE5; color: #065F46; }
+  .api-status.warn { background: #FEF3C7; color: #92400E; }
+  .selected-count-badge { background: var(--primary); color: white; border-radius: 20px; padding: 6px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .selected-count-badge:hover { background: var(--primary-light); }
+  .report-btn { background: white; border: 1.5px solid var(--primary); color: var(--primary); border-radius: 20px; padding: 5px 13px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .report-btn:hover { background: #FFF5F0; }
+
+  /* 보고서 모달 */
+  .report-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 30px 16px; }
+  .report-overlay.open { display: flex; }
+  .report-modal { background: white; border-radius: 20px; max-width: 760px; width: 100%; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+  .report-top { background: linear-gradient(120deg, #1A1A2E, #2D2D5A); color: white; padding: 22px 26px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .report-top .rt-title { font-size: 19px; font-weight: 800; }
+  .report-top .rt-date { font-size: 13px; opacity: 0.85; margin-top: 3px; }
+  .report-top .rt-close { background: rgba(255,255,255,0.15); border: none; color: white; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; cursor: pointer; }
+  .report-body { padding: 22px 26px; max-height: 70vh; overflow-y: auto; }
+  .rep-sec { margin-bottom: 22px; }
+  .rep-sec-title { font-size: 14px; font-weight: 800; color: var(--text); margin-bottom: 12px; padding-bottom: 7px; border-bottom: 2px solid var(--bg); display: flex; align-items: center; gap: 7px; }
+  .rep-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; border-bottom: 1px solid #F3F4F6; }
+  .rep-row:last-child { border-bottom: none; }
+  .rep-row .rr-rank { width: 22px; height: 22px; border-radius: 6px; background: var(--bg); font-size: 11px; font-weight: 700; color: var(--sub); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .rep-row .rr-rank.t { background: var(--primary); color: white; }
+  .rep-row .rr-name { flex: 1; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rep-row .rr-val { font-weight: 700; flex-shrink: 0; }
+  .rep-row .rr-val.up { color: var(--up); } .rep-row .rr-val.down { color: var(--down); } .rep-row .rr-val.same { color: var(--sub); }
+  .rep-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 600px) { .rep-cols { grid-template-columns: 1fr; } }
+  .rep-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .rep-chip { font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 16px; background: #FFF5F0; color: var(--primary); }
+  .rep-summary { background: var(--bg); border-radius: 12px; padding: 14px 16px; font-size: 13px; line-height: 1.6; color: var(--text); margin-bottom: 20px; border-left: 4px solid var(--primary); }
+  .report-foot { padding: 14px 26px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .rep-loading { padding: 50px 20px; text-align: center; color: var(--sub); }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+  /* Alert Banner */
+  .alert-banner { background: #FFF3CD; border: 1px solid #FFC107; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; font-size: 13px; }
+  .alert-banner.hidden { display: none; }
+  .alert-banner a { color: var(--primary); font-weight: 600; }
+
+  /* 🌅 아침 브리핑 */
+  .briefing { margin-bottom: 22px; border-radius: 18px; overflow: hidden; box-shadow: 0 4px 20px rgba(255,107,44,0.15); border: 1px solid #FFE0CC; }
+  .briefing.hidden { display: none; }
+  .brief-head { background: linear-gradient(120deg, #FF6B2C, #FF9558); color: white; padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .brief-head .b-title { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+  .brief-head .b-date { font-size: 13px; opacity: 0.95; font-weight: 500; }
+  .brief-refresh { background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); color: white; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  .brief-refresh:hover { background: rgba(255,255,255,0.32); }
+  .brief-body { background: white; padding: 18px 22px; }
+  .brief-headline { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 16px; line-height: 1.5; }
+  .brief-headline .hl { color: var(--primary); }
+  .brief-grid { display: grid; grid-template-columns: 1.1fr 1fr 1.3fr; gap: 18px; }
+  .brief-col .b-col-title { font-size: 12px; font-weight: 700; color: var(--sub); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .brief-rank { display: flex; align-items: center; gap: 9px; padding: 7px 0; border-bottom: 1px solid #F3F4F6; }
+  .brief-rank:last-child { border-bottom: none; }
+  .brief-rank .r-num { width: 20px; height: 20px; border-radius: 6px; background: var(--bg); color: var(--sub); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .brief-rank .r-num.top { background: var(--primary); color: white; }
+  .brief-rank .r-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-rank .r-val { font-size: 12px; font-weight: 700; flex-shrink: 0; }
+  .brief-rank .r-val.up { color: var(--up); }
+  .brief-rank .r-val.same { color: var(--sub); }
+  .brief-kw { display: flex; flex-wrap: wrap; gap: 6px; }
+  .brief-kw .kw { font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 16px; background: #FFF5F0; color: var(--primary); cursor: pointer; }
+  .brief-kw .kw:hover { background: #FFE6D6; }
+  .brief-prod { display: flex; align-items: center; gap: 9px; padding: 6px 0; cursor: pointer; }
+  .brief-prod img { width: 34px; height: 34px; border-radius: 7px; object-fit: cover; flex-shrink: 0; background: var(--bg); }
+  .brief-prod .p-info { flex: 1; min-width: 0; }
+  .brief-prod .p-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-prod .p-meta { font-size: 11px; color: var(--sub); }
+  .brief-loading { padding: 24px; text-align: center; color: var(--sub); font-size: 14px; }
+  @media (max-width: 768px) {
+    .brief-grid { grid-template-columns: 1fr; gap: 16px; }
+    .brief-head { padding: 16px; }
+    .brief-head .b-title { font-size: 16px; }
+    .brief-body { padding: 16px; }
+    .brief-col { border-top: 1px solid #F3F4F6; padding-top: 12px; }
+    .brief-col:first-child { border-top: none; padding-top: 0; }
+  }
+
+  .period-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .period-label { font-size: 13px; color: var(--sub); margin-right: 4px; font-weight: 500; }
+  .period-btn { padding: 8px 20px; border-radius: 20px; border: 1.5px solid var(--border); background: white; color: var(--sub); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+  .period-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .period-btn.active { background: var(--primary); border-color: var(--primary); color: white; box-shadow: 0 2px 8px rgba(255,107,44,0.3); }
+  .live-badge { font-size: 10px; background: #D1FAE5; color: #065F46; padding: 2px 7px; border-radius: 8px; font-weight: 700; margin-left: 4px; }
+  .mock-badge { font-size: 10px; background: #FEF3C7; color: #92400E; padding: 2px 7px; border-radius: 8px; font-weight: 700; margin-left: 4px; }
+
+  .summary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .summary-card { background: white; border-radius: 12px; padding: 18px 20px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+  .summary-card .label { font-size: 12px; color: var(--sub); margin-bottom: 6px; font-weight: 500; }
+  .summary-card .value { font-size: 24px; font-weight: 700; color: var(--text); }
+  .summary-card .change { font-size: 12px; margin-top: 4px; }
+  .change.up { color: var(--up); } .change.down { color: var(--down); }
+
+  .platform-tabs { display: flex; background: white; border-radius: 12px; padding: 4px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: var(--shadow); width: fit-content; }
+  .platform-tab { padding: 10px 24px; border-radius: 9px; border: none; background: transparent; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; color: var(--sub); display: flex; align-items: center; gap: 6px; }
+  .platform-tab .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .platform-tab[data-platform="all"] .dot { background: var(--primary); }
+  .platform-tab[data-platform="coupang"] .dot { background: var(--coupang); }
+  .platform-tab[data-platform="naver"] .dot { background: var(--naver); }
+  .platform-tab[data-platform="instagram"] .dot { background: var(--insta); }
+  .platform-tab[data-platform="china"] .dot { background: var(--china); }
+  .platform-tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+  .badge-china { background: var(--china); }
+
+  .category-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+  .cat-btn { padding: 5px 12px; border-radius: 14px; border: 1px solid var(--border); background: white; font-size: 12px; color: var(--sub); cursor: pointer; transition: all 0.15s; }
+  .cat-btn:hover, .cat-btn.active { border-color: var(--primary); color: var(--primary); background: #FFF5F0; }
+
+  .dashboard { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  @media (max-width: 1100px) { .dashboard { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 700px) { .dashboard { grid-template-columns: 1fr; } .summary-row { grid-template-columns: 1fr 1fr; } }
+
+  .trend-panel { background: white; border-radius: 16px; border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; }
+  .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .panel-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .panel-platform-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; color: white; }
+  .badge-coupang { background: var(--coupang); }
+  .badge-naver { background: var(--naver); }
+  .badge-instagram { background: var(--insta); }
+  .badge-all { background: var(--primary); }
+
+  /* 상품 카드 */
+  .trend-list { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .trend-item { background: var(--bg); border-radius: 12px; border: 1.5px solid transparent; padding: 14px; cursor: pointer; transition: all 0.15s; }
+  .trend-item:hover { border-color: var(--border); background: white; }
+  .trend-item.selected { background: #FFF5F0; border-color: var(--primary); }
+
+  .item-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .rank { width: 26px; height: 26px; border-radius: 8px; background: white; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--sub); flex-shrink: 0; }
+  .rank.top3 { background: var(--primary); border-color: var(--primary); color: white; font-size: 14px; }
+  .item-emoji { width: 42px; height: 42px; border-radius: 10px; background: white; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; border: 1px solid var(--border); }
+  .item-main { flex: 1; min-width: 0; }
+  .item-name { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+  .item-sub { font-size: 11px; color: var(--sub); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .item-sub span { display: flex; align-items: center; gap: 2px; }
+  .item-sub .sep { color: var(--border); }
+  .item-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+  .trend-change { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 10px; }
+  .trend-change.up { background: #FEE2E2; color: var(--up); }
+  .trend-change.down { background: #DBEAFE; color: var(--down); }
+  .trend-change.new { background: #EDE9FE; color: var(--new); }
+  .trend-change.same { background: #F3F4F6; color: var(--sub); }
+
+  /* 상세 정보 행 */
+  .item-details { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+  .detail-chip { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+  .detail-chip .d-label { font-size: 10px; color: var(--sub); font-weight: 600; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .detail-chip .d-value { font-size: 12px; font-weight: 600; color: var(--text); }
+
+  /* 키워드 태그 */
+  .item-keywords { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .kw-tag { font-size: 11px; background: white; border: 1px solid var(--border); color: var(--sub); padding: 3px 9px; border-radius: 20px; font-weight: 500; }
+  .kw-tag.hot { border-color: #FCA5A5; color: var(--up); background: #FFF5F5; }
+
+  /* 트렌드 이유 */
+  .item-reason { font-size: 12px; color: var(--sub); background: white; border-radius: 8px; padding: 8px 10px; border-left: 3px solid var(--primary); line-height: 1.5; }
+
+  /* 하단 버튼 */
+  .item-footer { display: flex; align-items: center; justify-content: flex-end; margin-top: 10px; }
+  .select-btn { padding: 6px 16px; border-radius: 20px; border: 1.5px solid var(--border); background: white; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--sub); transition: all 0.15s; display: flex; align-items: center; gap: 5px; }
+  .select-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .select-btn.selected { background: var(--primary); border-color: var(--primary); color: white; }
+
+  /* Naver Chart Panel */
+  .naver-chart { padding: 16px 20px; }
+  .chart-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; cursor: pointer; padding: 4px; border-radius: 6px; transition: background 0.1s; }
+  .chart-bar-row:hover { background: var(--bg); }
+  .chart-label { width: 90px; font-size: 12px; color: var(--sub); text-align: right; flex-shrink: 0; }
+  .chart-bar-wrap { flex: 1; background: var(--bg); border-radius: 4px; height: 22px; overflow: hidden; }
+  .chart-bar { height: 100%; border-radius: 4px; background: var(--naver); transition: width 0.6s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: center; padding-left: 8px; min-width: 30px; }
+  .chart-bar span { font-size: 11px; color: white; font-weight: 600; white-space: nowrap; }
+  .chart-change { font-size: 11px; font-weight: 600; width: 52px; text-align: right; flex-shrink: 0; }
+  .chart-change.up { color: var(--up); }
+  .chart-change.down { color: var(--down); }
+  .chart-change.same { color: var(--sub); }
+
+  /* Keyword cloud */
+  .keyword-cloud { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px 20px; }
+  .keyword-tag { padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: transform 0.1s; }
+  .keyword-tag:hover { transform: scale(1.05); }
+  .kw-size-1 { font-size: 11px; background: #F3F4F6; color: var(--sub); }
+  .kw-size-2 { font-size: 13px; background: #FEF3C7; color: #92400E; }
+  .kw-size-3 { font-size: 15px; background: #FCE7F3; color: #9D174D; }
+  .kw-size-4 { font-size: 17px; background: #FFF5F0; color: var(--primary); font-weight: 700; }
+
+  .refresh-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: white; font-size: 12px; color: var(--sub); cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  .refresh-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .refresh-btn.loading { opacity: 0.6; pointer-events: none; }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 기회점수 패널 */
+  .opp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px 6px; }
+  @media (max-width: 1100px) { .opp-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .opp-grid { grid-template-columns: 1fr; } }
+  .opp-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 13px; background: white; transition: all 0.15s; }
+  .opp-card:hover { border-color: var(--primary); box-shadow: 0 2px 10px rgba(255,107,44,0.12); }
+  .opp-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .opp-rank { width: 22px; height: 22px; border-radius: 6px; background: var(--bg); font-size: 12px; font-weight: 700; color: var(--sub); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .opp-name { flex: 1; font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opp-score { font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: 10px; flex-shrink: 0; }
+  .opp-bars { display: flex; flex-direction: column; gap: 5px; margin-bottom: 9px; }
+  .opp-bar { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--sub); }
+  .opp-bar span { width: 26px; flex-shrink: 0; }
+  .opp-bar b { width: 56px; text-align: right; color: var(--text); font-size: 11px; flex-shrink: 0; }
+  .opp-track { flex: 1; height: 7px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .opp-track div { height: 100%; border-radius: 4px; }
+  .opp-signal { font-size: 11.5px; font-weight: 600; color: var(--text); background: var(--bg); border-radius: 7px; padding: 6px 9px; line-height: 1.35; }
+
+  /* 리뷰 분석 결과 */
+  .rev-sum-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin-bottom: 6px; }
+  .rev-sum-bar div { height: 100%; }
+  .rev-sum-leg { display: flex; gap: 12px; font-size: 12px; font-weight: 600; margin-bottom: 16px; flex-wrap: wrap; }
+  .rev-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .rev-cols { grid-template-columns: 1fr; } }
+  .rev-h { font-size: 13px; font-weight: 700; margin-bottom: 8px; }
+  .rev-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rev-chip { font-size: 12px; padding: 5px 10px; border-radius: 14px; font-weight: 600; }
+  .rev-chip b { font-weight: 800; margin-left: 2px; }
+  .rev-chip.pos { background: #E7F6EE; color: #0F9D58; }
+  .rev-chip.neg { background: #FEE2E2; color: #EF4444; }
+  .rev-cloud { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; padding: 6px 0; }
+  .rev-cloud span { font-weight: 700; color: var(--text); }
+  .rev-insight { margin-top: 16px; background: #FFF9F5; border-left: 4px solid var(--primary); border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--text); }
+  .rev-hist { background: var(--bg); border-radius: 10px; padding: 11px 13px; margin-bottom: 9px; }
+  .ra-badge { margin-top: 6px; font-size: 11px; background: #E7F6EE; color: #0F6B3F; border-radius: 7px; padding: 5px 8px; line-height: 1.4; }
+
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--sub); }
+  .empty-state .icon { font-size: 40px; margin-bottom: 10px; }
+  .empty-state p { font-size: 14px; }
+
+  /* Drawer */
+  .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .drawer-overlay.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; right: -520px; width: 520px; height: 100vh; background: white; z-index: 201; transition: right 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; box-shadow: -4px 0 20px rgba(0,0,0,0.12); }
+  .drawer.open { right: 0; }
+  .drawer-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .drawer-title { font-size: 17px; font-weight: 700; }
+  .drawer-close { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border); background: white; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 16px 24px; }
+  .drawer-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .btn-primary { flex: 1; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.15s; min-width: 120px; }
+  .btn-primary:hover { background: var(--primary-light); }
+  .btn-primary:disabled { opacity: 0.6; cursor: default; }
+  .btn-outline { padding: 12px 20px; background: white; color: var(--sub); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .btn-sheets { background: #0F9D58; }
+  .btn-sheets:hover { background: #0B8043; }
+
+  .selected-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg); border-radius: 10px; margin-bottom: 10px; }
+  .selected-item .item-emoji { width: 36px; height: 36px; font-size: 20px; }
+  .selected-item .info { flex: 1; }
+  .selected-item .name { font-size: 14px; font-weight: 600; }
+  .selected-item .meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .remove-btn { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border); background: white; cursor: pointer; color: var(--sub); font-size: 13px; display: flex; align-items: center; justify-content: center; }
+  .remove-btn:hover { background: #FEE2E2; color: var(--up); border-color: var(--up); }
+
+  .section-title { font-size: 13px; font-weight: 600; color: var(--sub); margin-bottom: 12px; }
+  .note-label { font-size: 12px; font-weight: 600; color: var(--sub); margin-top: 16px; display: block; margin-bottom: 6px; }
+  .note-area { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 13px; resize: vertical; min-height: 80px; font-family: inherit; color: var(--text); }
+  .note-area:focus { outline: none; border-color: var(--primary); }
+
+  .sheets-result { margin-top: 10px; font-size: 12px; padding: 8px 12px; border-radius: 8px; }
+  .sheets-result.success { background: #D1FAE5; color: #065F46; }
+  .sheets-result.error { background: #FEE2E2; color: #991B1B; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--text); color: white; padding: 12px 24px; border-radius: 24px; font-size: 14px; font-weight: 500; z-index: 300; transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); pointer-events: none; white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Setup Modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 400; display: flex; align-items: center; justify-content: center; }
+  .modal-overlay.hidden { display: none; }
+  .modal { background: white; border-radius: 20px; padding: 32px; max-width: 560px; width: 90%; max-height: 80vh; overflow-y: auto; }
+  .modal h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .modal .sub { color: var(--sub); font-size: 14px; margin-bottom: 24px; }
+  .setup-step { background: var(--bg); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .setup-step .step-num { font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; margin-bottom: 6px; }
+  .setup-step .step-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .setup-step .step-desc { font-size: 13px; color: var(--sub); line-height: 1.6; }
+  .setup-step code { background: #1A1A2E; color: #FF8F5A; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  .modal-footer { margin-top: 20px; display: flex; gap: 10px; }
+
+  .last-fetch { font-size: 11px; color: var(--sub); margin-top: 4px; }
+
+  .logo-long, .badge-long { } /* 기본은 표시, 모바일에서 숨김 */
+
+  /* drawer 기본 너비를 화면보다 크지 않게 */
+  .drawer { width: min(520px, 100vw); right: calc(-1 * min(520px, 100vw)); }
+
+  /* 부드러운 가로 스크롤 (필터바 공통) */
+  .period-bar, .platform-tabs, .category-filter { scroll-snap-type: x proximity; }
+
+  /* ===================== 태블릿 (≤1024px) ===================== */
+  @media (max-width: 1024px) {
+    .container { padding: 20px; }
+    .summary-row { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  }
+
+  /* ===================== 모바일 (≤768px) ===================== */
+  @media (max-width: 768px) {
+    header { padding: 0 14px; height: 54px; }
+    .logo { font-size: 16px; gap: 7px; min-width: 0; }
+    .logo-icon { width: 28px; height: 28px; font-size: 16px; flex-shrink: 0; }
+    .header-right { gap: 6px; }
+    .date-badge { display: none; }                 /* 날짜는 숨김 */
+    .api-status { font-size: 10px; padding: 3px 8px; white-space: nowrap; }
+    .selected-count-badge { font-size: 13px; padding: 6px 11px; white-space: nowrap; }
+
+    .container { padding: 14px; }
+    .alert-banner { font-size: 12px; padding: 10px 12px; }
+
+    /* 가로 스크롤 필터바 — 버튼 잘림 방지 + 스냅 */
+    .period-bar, .platform-tabs, .category-filter {
+      flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      padding-bottom: 6px; margin-bottom: 14px; scrollbar-width: none;
+    }
+    .period-bar::-webkit-scrollbar, .platform-tabs::-webkit-scrollbar, .category-filter::-webkit-scrollbar { display: none; }
+    .platform-tabs { width: 100%; }
+    .period-btn, .platform-tab, .cat-btn { flex: 0 0 auto; scroll-snap-align: start; }
+    .period-label { flex-shrink: 0; }
+    .period-btn { padding: 9px 18px; font-size: 14px; }   /* 터치 영역 ↑ */
+    .platform-tab { padding: 10px 16px; font-size: 13px; }
+    .cat-btn { padding: 7px 14px; font-size: 13px; }
+
+    /* 요약 카드 2열 */
+    .summary-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+    .summary-card { padding: 14px; }
+    .summary-card .value { font-size: 20px; }
+
+    /* 패널 1열 */
+    .dashboard { grid-template-columns: 1fr !important; gap: 14px; }
+    .trend-panel[style*="span 3"], .trend-panel[style*="span 2"] { grid-column: span 1 !important; }
+    .panel-header { padding: 14px 16px; }
+    .panel-title { font-size: 14px; }
+
+    /* 상품 카드 — 터치 친화적 */
+    .trend-list { padding: 10px; gap: 9px; }
+    .trend-item { padding: 13px; }
+    .item-emoji { width: 46px; height: 46px; }
+    .item-name { font-size: 14px; white-space: normal; word-break: break-word; }
+    .item-details { grid-template-columns: 1fr 1fr; }
+    .select-btn { min-height: 38px; padding: 8px 16px; }
+    .chart-label { width: 76px; }
+
+    /* drawer 전체 화면 */
+    .drawer { width: 100vw; right: -100vw; }
+    .drawer.open { right: 0; }
+    .drawer-footer { flex-direction: column; }
+    .drawer-footer .btn-primary, .drawer-footer .btn-outline { width: 100%; }
+
+    .modal { padding: 20px; max-height: 88vh; }
+    .toast { width: max-content; max-width: 90vw; white-space: normal; text-align: center; }
+  }
+
+  /* ===================== 작은 폰 (≤430px) ===================== */
+  @media (max-width: 430px) {
+    .logo-long, .badge-long { display: none; }     /* "감자마켓"·"📋 N"만 표시 */
+    .logo { font-size: 17px; }
+    .item-details { grid-template-columns: 1fr; }   /* 상세칩 1열 */
+    .summary-card .label { font-size: 11px; }
+    .summary-card .value { font-size: 19px; }
+  }
+
+  /* ===================== 아주 작은 폰 (≤360px) ===================== */
+  @media (max-width: 360px) {
+    .summary-row { grid-template-columns: 1fr; }
+  }
+</style>
+
+<!-- ============================================================
+     PDT (Product Discovery Terminal) — 3분할 터미널 레이아웃
+     기존 카드/모달/드로어 스타일은 그대로 재사용하고
+     여기서 셸(헤더·검색·3열 그리드·하단)만 새로 정의한다.
+     ============================================================ -->
+<style>
+  :root {
+    --term-bg: #0E1116;
+    --term-panel: #FFFFFF;
+    --term-head: #14181F;
+    --term-line: #232A33;
+  }
+  body { background: #0B0E13; }
+
+  .pdt-wrap { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* 터미널 헤더 + 검색 */
+  .pdt-header {
+    background: linear-gradient(180deg,#161B23,#11151B);
+    border-bottom: 1px solid var(--term-line);
+    color: #F4F6F8; padding: 0 18px; height: 56px;
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .pdt-logo { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 16px; color: #fff; white-space: nowrap; }
+  .pdt-logo .logo-icon { width: 30px; height: 30px; background: var(--primary); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  .pdt-logo .tag { font-size: 10px; font-weight: 700; color: var(--primary); border: 1px solid var(--primary); border-radius: 5px; padding: 1px 6px; letter-spacing: 0.5px; }
+
+  .pdt-search { flex: 1; max-width: 540px; display: flex; align-items: center; background: #0C1015; border: 1px solid var(--term-line); border-radius: 10px; padding: 0 6px 0 12px; height: 38px; }
+  .pdt-search:focus-within { border-color: var(--primary); }
+  .pdt-search input { flex: 1; background: transparent; border: none; outline: none; color: #fff; font-size: 14px; font-family: inherit; }
+  .pdt-search input::placeholder { color: #6B7686; }
+  .pdt-search button { background: var(--primary); color: #fff; border: none; border-radius: 7px; height: 28px; padding: 0 12px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .pdt-search button:hover { background: var(--primary-light); }
+
+  .pdt-header-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .pdt-header .api-status { font-size: 11px; }
+  .pdt-header .date-badge { background: #0C1015; border-color: var(--term-line); color: #9AA6B2; }
+  .pdt-header .report-btn { background: #1A1F27; border-color: var(--term-line); color: #D7DEE6; }
+  .pdt-header .report-btn:hover { background: #222932; border-color: var(--primary); color: #fff; }
+  .pdt-header .selected-count-badge { background: var(--primary); }
+
+  /* 컨트롤 바 (기간·플랫폼·카테고리) */
+  .pdt-controls { background: #11151B; border-bottom: 1px solid var(--term-line); padding: 8px 16px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .pdt-controls .period-bar, .pdt-controls .platform-tabs, .pdt-controls .category-filter { margin: 0; }
+  .pdt-controls .period-label { color: #8A95A2; }
+  .pdt-controls .period-btn { background: #0C1015; border-color: var(--term-line); color: #B7C0CB; }
+  .pdt-controls .period-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .pdt-controls .platform-tabs { background: #0C1015; border-color: var(--term-line); box-shadow: none; }
+  .pdt-controls .platform-tab { color: #8A95A2; }
+  .pdt-controls .platform-tab.active { background: #1C222B; color: #fff; box-shadow: none; }
+  .pdt-controls .cat-btn { background: #0C1015; border-color: var(--term-line); color: #9AA6B2; }
+  .pdt-controls .cat-btn.active, .pdt-controls .cat-btn:hover { background: #1C222B; border-color: var(--primary); color: var(--primary); }
+  .pdt-controls .live-badge, .pdt-controls .mock-badge { margin-left: 0; }
+  .pdt-controls .last-fetch { color: #6B7686; }
+
+  .pdt-strip { padding: 12px 16px 0; }
+  .pdt-strip .alert-banner { margin-bottom: 12px; }
+  .pdt-strip .briefing { margin-bottom: 0; }
+
+  /* 3분할 그리드 */
+  .pdt-grid { display: grid; grid-template-columns: 320px 1fr 340px; gap: 12px; padding: 12px 16px; align-items: start; }
+  .pdt-col { background: var(--term-panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.25); }
+  .pdt-col.center { background: transparent; border: none; box-shadow: none; display: flex; flex-direction: column; gap: 12px; }
+  .pdt-col-title { padding: 12px 16px; font-size: 13px; font-weight: 800; color: var(--text); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 7px; background: #FAFBFC; }
+  .pdt-col.left .pdt-col-title, .pdt-col.right .pdt-col-title { position: sticky; top: 0; z-index: 2; }
+  .pdt-col-body { max-height: calc(100vh - 220px); overflow-y: auto; }
+
+  /* 좌측 종목(watchlist) 목록 */
+  .wl-head { display: flex; justify-content: space-between; padding: 8px 16px; font-size: 11px; color: var(--sub); font-weight: 700; background: #FAFBFC; border-bottom: 1px solid var(--border); }
+  .wl-note { padding: 8px 16px; font-size: 11px; color: var(--sub); background: #FFF9F5; border-bottom: 1px solid var(--border); }
+  .wl-row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid #F1F3F5; cursor: pointer; transition: background 0.12s; }
+  .wl-row:hover { background: #FFF5F0; }
+  .wl-row.active { background: #FFF5F0; box-shadow: inset 3px 0 0 var(--primary); }
+  .wl-rank { width: 20px; height: 20px; border-radius: 6px; background: var(--bg); color: var(--sub); font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .wl-row.active .wl-rank { background: var(--primary); color: #fff; }
+  .wl-main { flex: 1; min-width: 0; }
+  .wl-name { font-size: 13.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wl-sub { font-size: 11px; color: var(--sub); margin-top: 2px; }
+  .wl-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+  .wl-score { font-size: 16px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+  .wl-chg { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .wl-chg.up { color: var(--up); } .wl-chg.down { color: var(--down); } .wl-chg.same { color: var(--sub); }
+
+  /* 좌측 상품 단위 카드 */
+  .pl-cat { padding: 9px 14px; font-size: 12px; font-weight: 800; color: var(--text); background: #FFF9F5; border-bottom: 1px solid var(--border); display:flex; align-items:center; gap:6px; }
+  .pl-cat .pl-cnt { font-size:11px; font-weight:600; color:var(--sub); }
+  .pl-row { display: flex; gap: 10px; padding: 11px 12px; border-bottom: 1px solid #F1F3F5; cursor: pointer; transition: background .12s; }
+  .pl-row:hover { background:#FFF5F0; }
+  .pl-row.active { background:#FFF5F0; box-shadow: inset 3px 0 0 var(--primary); }
+  .pl-rank { width:18px; font-size:12px; font-weight:800; color:var(--sub); flex-shrink:0; padding-top:2px; }
+  .pl-row.active .pl-rank { color: var(--primary); }
+  .pl-thumb { width:42px; height:42px; border-radius:9px; background:#F1F3F5; flex-shrink:0; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .pl-thumb img { width:100%; height:100%; object-fit:cover; }
+  .pl-body { flex:1; min-width:0; }
+  .pl-name { font-size:13px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pl-stars { font-size:11px; color:#F59E0B; font-weight:700; margin-top:2px; }
+  .pl-stars span { color:var(--sub); font-weight:500; }
+  .pl-metrics { display:flex; gap:8px; font-size:10.5px; color:var(--sub); margin-top:3px; }
+  .pl-metrics b { color:var(--text); font-weight:700; }
+  .pl-side { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0; }
+  .pl-score { font-size:13px; font-weight:800; color:#fff; background:var(--primary); border-radius:7px; padding:2px 7px; }
+  .pl-chg { font-size:11px; font-weight:700; }
+  .pl-chg.up{color:var(--up)} .pl-chg.down{color:var(--down)} .pl-chg.same{color:var(--sub)}
+  .pl-demo { padding:7px 14px; font-size:10.5px; color:var(--sub); background:#FAFBFC; border-bottom:1px solid var(--border); line-height:1.4; }
+
+  /* 중앙 KPI 스트립 */
+  .kpi-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 18px; background: var(--term-panel); border: 1px solid var(--border); border-radius: 14px 14px 0 0; border-bottom: none; flex-wrap: wrap; }
+  .kpi-title { font-size: 16px; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 9px; }
+  .kpi-score { font-size: 12px; font-weight: 800; padding: 3px 10px; border-radius: 10px; }
+  .kpi-note { font-size: 11px; color: var(--sub); }
+  .kpi-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-top: none; border-radius: 0 0 14px 14px; overflow: hidden; }
+  .kpi { background: var(--term-panel); padding: 14px 16px; }
+  .kpi-l { font-size: 11px; color: var(--sub); font-weight: 600; margin-bottom: 6px; }
+  .kpi-v { font-size: 26px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1; }
+  .kpi-s { font-size: 11px; color: var(--sub); margin-top: 5px; }
+
+  /* 중앙 패널(상품 리스트)은 기존 .trend-panel 스타일 재사용 */
+  .pdt-col.center .trend-panel { box-shadow: 0 4px 24px rgba(0,0,0,0.18); }
+
+  /* 우측 AI 리포트 */
+  .ai-badge { margin: 14px 16px; font-size: 11px; background: #EEF2FF; color: #4338CA; border-radius: 8px; padding: 8px 11px; line-height: 1.4; }
+  .ai-sec { padding: 0 16px 14px; }
+  .ai-h { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .ai-tag { font-size: 10px; font-weight: 600; color: var(--sub); background: var(--bg); border-radius: 8px; padding: 2px 7px; }
+  .ai-ul { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .ai-ul li { font-size: 13px; color: var(--text); background: var(--bg); border-radius: 8px; padding: 8px 11px; line-height: 1.45; }
+  .ai-ul li b { color: var(--primary); }
+  .ai-ul li.ai-muted { color: var(--sub); background: #FAFBFC; }
+  .ai-signal { margin: 0 16px 14px; font-size: 12.5px; font-weight: 600; color: var(--text); background: #FFF9F5; border-left: 4px solid var(--primary); border-radius: 8px; padding: 10px 12px; line-height: 1.45; }
+  .ai-empty { padding: 50px 20px; text-align: center; color: var(--sub); font-size: 13px; line-height: 1.7; }
+
+  /* 하단 스트립 */
+  .pdt-bottom { margin: 0 16px 16px; background: var(--term-panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.25); }
+  .bot-grid { display: grid; grid-template-columns: 1.4fr 1fr 1.2fr; gap: 1px; background: var(--border); }
+  .bot-card { background: var(--term-panel); padding: 14px 16px; }
+  .bot-h { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
+
+  /* 반응형: 태블릿/모바일에서 단일 컬럼으로 적층 */
+  @media (max-width: 1180px) {
+    .pdt-grid { grid-template-columns: 1fr; }
+    .pdt-col-body { max-height: none; }
+    .bot-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .pdt-header { flex-wrap: wrap; height: auto; padding: 8px 12px; gap: 8px; }
+    .pdt-search { order: 3; max-width: none; width: 100%; }
+    .pdt-grid, .pdt-strip { padding-left: 10px; padding-right: 10px; }
+    .pdt-bottom { margin-left: 10px; margin-right: 10px; }
+    .kpi-strip { grid-template-columns: 1fr 1fr; }
+    .kpi-v { font-size: 22px; }
+  }
+
+  /* ===== 추가: 6KPI · 선형차트/탭 · 시장요약 · 기회 게이지 · 다음액션 · 플라이휠 ===== */
+  .kpi-strip.kpi6 { grid-template-columns: repeat(6, 1fr); }
+  @media (max-width: 1180px) { .kpi-strip.kpi6 { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 768px) { .kpi-strip.kpi6 { grid-template-columns: 1fr 1fr; } }
+  .kpi6 .kpi-v { font-size: 22px; }
+  .kpi-v.kpi-pos { color: var(--up); } .kpi-v.kpi-neg { color: var(--down); }
+
+  /* 중앙 차트 패널 + 탭 */
+  .cchart-panel { background: var(--term-panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.18); overflow: hidden; }
+  .cchart-tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .cchart-tab { font-size: 12px; font-weight: 700; color: var(--sub); background: transparent; border: none; padding: 8px 12px; border-radius: 8px 8px 0 0; cursor: pointer; border-bottom: 2px solid transparent; }
+  .cchart-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: #FFF9F5; }
+  .cchart-body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); }
+  @media (max-width: 900px) { .cchart-body { grid-template-columns: 1fr; } }
+  .cchart-cell { background: var(--term-panel); padding: 12px 14px; }
+  .cchart-cell h5 { font-size: 11px; color: var(--sub); font-weight: 700; margin: 0 0 4px; display:flex; justify-content:space-between; }
+  .cchart-cell h5 b { font-size: 13px; color: var(--text); }
+  .spark { width: 100%; height: 56px; display: block; }
+  .cchart-note { padding: 8px 14px 12px; font-size: 11px; color: var(--sub); }
+
+  /* 우측 시장요약 + 기회 게이지 */
+  .ai-summary { margin: 0 16px 14px; font-size: 12.5px; line-height: 1.55; color: var(--text); background: #FAFBFC; border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; }
+  .ai-summary b { color: var(--primary); }
+  .opp-gauge { margin: 0 16px 14px; padding: 14px; background: linear-gradient(180deg,#FFF9F5,#fff); border: 1.5px solid var(--primary); border-radius: 12px; text-align: center; }
+  .opp-gauge .g-label { font-size: 11px; color: var(--sub); font-weight: 700; }
+  .opp-gauge .g-num { font-size: 40px; font-weight: 900; color: var(--primary); line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .opp-gauge .g-tier { font-size: 12px; font-weight: 800; }
+  .opp-gauge .g-track { height: 8px; border-radius: 99px; background: #EEF0F2; overflow: hidden; margin: 8px 0 6px; }
+  .opp-gauge .g-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg,#F59E0B,var(--primary)); }
+  .opp-gauge .g-hint { font-size: 11px; color: var(--sub); }
+
+  /* 다음 액션 패널 */
+  .next-actions { margin: 0 16px 16px; }
+  .next-actions .na-h { font-size: 13px; font-weight: 800; margin-bottom: 8px; display:flex; align-items:center; gap:6px; }
+  .na-btn { width: 100%; text-align: left; display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 700; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin-bottom: 7px; cursor: pointer; transition: all .12s; }
+  .na-btn:hover { background: #FFF5F0; border-color: var(--primary); }
+  .na-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .na-btn.primary:hover { filter: brightness(1.05); }
+  .na-btn .na-ico { font-size: 15px; }
+
+  /* 하단 ④ 4분할: 리뷰요약 · 워드클라우드 · 감성도넛 · 가격대별 */
+  .bot-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); }
+  @media (max-width: 1180px) { .bot-grid4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 640px) { .bot-grid4 { grid-template-columns: 1fr; } }
+  .rb-toggle { display:flex; gap:4px; margin-bottom:8px; }
+  .rb-toggle button { font-size:11px; font-weight:700; border:1px solid var(--border); background:var(--term-panel); color:var(--sub); border-radius:7px; padding:4px 9px; cursor:pointer; }
+  .rb-toggle button.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .kwbar { margin-bottom:7px; }
+  .kwbar-top { display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:3px; }
+  .kwbar-top b { color:var(--text); font-weight:700; }
+  .kwbar-top span { color:var(--sub); font-variant-numeric:tabular-nums; }
+  .kwbar-track { height:7px; border-radius:99px; background:#EEF0F2; overflow:hidden; }
+  .kwbar-fill { height:100%; border-radius:99px; }
+  .donut-wrap { display:flex; align-items:center; gap:12px; }
+  .donut-legend { font-size:11.5px; }
+  .donut-legend div { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+  .donut-legend .dot2 { width:9px; height:9px; border-radius:3px; }
+  .demo-tag { font-size:10px; font-weight:700; color:#92400E; background:#FEF3C7; border-radius:6px; padding:1px 6px; }
+
+  /* ===== 사진형 5분할: 네비 레일 + 상품탐색 + 분석 + AI + 액션 ===== */
+  .pdt-grid.pdt-grid5 { grid-template-columns: 196px 284px 1fr 300px 208px; }
+  @media (max-width: 1480px) { .pdt-grid.pdt-grid5 { grid-template-columns: 184px 260px 1fr 270px; } .pdt-col.action { grid-column: 1 / -1; } }
+  @media (max-width: 1180px) { .pdt-grid.pdt-grid5 { grid-template-columns: 1fr; } .pdt-col.action { grid-column: auto; } }
+
+  /* 네비 레일 */
+  .pdt-col.rail .pdt-col-body { padding: 0; }
+  .rail-menu { padding: 6px; border-bottom: 1px solid var(--border); }
+  .rail-item { display: flex; align-items: center; gap: 9px; padding: 9px 11px; font-size: 12.5px; font-weight: 600; color: var(--text); border-radius: 9px; cursor: pointer; }
+  .rail-item:hover { background: #FFF5F0; }
+  .rail-item.active { background: var(--primary); color: #fff; }
+  .rail-item .ri-ico { font-size: 14px; width: 16px; text-align: center; }
+  .rail-sec-h { padding: 11px 13px 6px; font-size: 11px; font-weight: 800; color: var(--sub); }
+  .rail-cats { display: flex; flex-direction: column; gap: 3px; padding: 0 8px 8px; border-bottom: 1px solid var(--border); }
+  .rail-cats .cat-btn { width: 100%; text-align: left; justify-content: flex-start; }
+  .rail-rank { padding: 2px 8px 10px; }
+  .rr-row { display: flex; align-items: center; gap: 8px; padding: 7px 7px; border-radius: 8px; cursor: pointer; }
+  .rr-row:hover { background: #FFF5F0; }
+  .rr-row.active { background: #FFF1E9; }
+  .rr-rank { width: 16px; font-size: 12px; font-weight: 800; color: var(--sub); }
+  .rr-row.active .rr-rank { color: var(--primary); }
+  .rr-name { flex: 1; font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rr-score { font-size: 12px; font-weight: 800; color: #fff; background: var(--primary); border-radius: 6px; padding: 1px 6px; }
+
+  /* 상품탐색 / 액션 컬럼 헤더 번호 톤 */
+  .pdt-col-title .col-no { font-size: 11px; font-weight: 800; color: #fff; background: var(--primary); border-radius: 6px; padding: 1px 6px; margin-right: 2px; }
+
+  /* 하단 플라이휠 Loop 바 */
+  .pdt-flywheel { margin: 0 16px 18px; background: var(--term-panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.25); padding: 14px 16px; }
+  .fw-title { font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .fw-title .fw-loop { font-size: 11px; font-weight: 700; color: var(--primary); background: #FFF1E9; border-radius: 8px; padding: 2px 8px; }
+  .fw-steps { display: flex; align-items: stretch; gap: 0; overflow-x: auto; }
+  .fw-step { flex: 1; min-width: 116px; display: flex; align-items: center; }
+  .fw-node { flex: 1; text-align: center; padding: 4px 6px; }
+  .fw-num { width: 26px; height: 26px; margin: 0 auto 6px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .fw-step.alt .fw-num { background: #FDBA74; }
+  .fw-label { font-size: 11.5px; font-weight: 700; color: var(--text); line-height: 1.25; }
+  .fw-sub { font-size: 10px; color: var(--sub); margin-top: 2px; }
+  .fw-arrow { color: var(--primary); font-size: 14px; font-weight: 800; flex-shrink: 0; padding: 0 2px; align-self: flex-start; margin-top: 6px; }
+  .fw-step:last-child .fw-arrow { color: var(--sub); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     PDT 셸: 헤더(검색) → 컨트롤바 → 3분할 그리드 → 하단 스트립
+     ============================================================ -->
+<div class="pdt-wrap">
+
+  <!-- 터미널 헤더 + 검색 -->
+  <div class="pdt-header">
+    <div class="pdt-logo">
+      <div class="logo-icon">🥔</div>
+      <span>감자마켓</span>
+      <span class="tag">PDT</span>
+    </div>
+    <div class="pdt-search">
+      <input id="pdtSearch" type="text" placeholder="상품·키워드 검색 후 Enter (예: 캠핑선풍기)"
+        onkeydown="if(event.key==='Enter')doSearch()" />
+      <button onclick="doSearch()">검색</button>
+    </div>
+    <div class="pdt-header-right">
+      <span class="api-status warn" id="apiStatusBadge">⚙️ 설정 필요</span>
+      <div class="date-badge" id="currentDate"></div>
+      <div class="report-btn" onclick="openReviewAnalyzer()">📝<span class="badge-long"> 리뷰분석</span></div>
+      <div class="report-btn" onclick="openReport()">📑<span class="badge-long"> 보고서</span></div>
+      <div class="selected-count-badge" onclick="openDrawer()">
+        📋<span class="badge-long"> 선별</span> <span id="selectedCountBadge">0</span><span class="badge-long">개</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 컨트롤 바: 기간 · 플랫폼 · 카테고리 (기존 핸들러/클래스 그대로 재사용) -->
+  <div class="pdt-controls">
+    <div class="period-bar">
+      <span class="period-label">기간</span>
+      <button class="period-btn active" onclick="setPeriod('daily', this)">일간</button>
+      <button class="period-btn" onclick="setPeriod('weekly', this)">주간</button>
+      <button class="period-btn" onclick="setPeriod('monthly', this)">월간</button>
+      <button class="period-btn" onclick="setPeriod('yearly', this)">연간</button>
+      <span id="dataSourceBadge" class="mock-badge">목업 데이터</span>
+      <span id="lastFetchTime" class="last-fetch"></span>
+    </div>
+    <div class="platform-tabs">
+      <button class="platform-tab active" data-platform="all" onclick="setPlatform('all', this)"><span class="dot"></span> 전체</button>
+      <button class="platform-tab" data-platform="coupang" onclick="setPlatform('coupang', this)"><span class="dot"></span> 쿠팡</button>
+      <button class="platform-tab" data-platform="naver" onclick="setPlatform('naver', this)"><span class="dot"></span> 네이버</button>
+      <button class="platform-tab" data-platform="instagram" onclick="setPlatform('instagram', this)"><span class="dot"></span> 인스타</button>
+      <button class="platform-tab" data-platform="china" onclick="setPlatform('china', this)"><span class="dot"></span> 중국</button>
+    </div>
+  </div>
+
+  <!-- 알림 + 아침 브리핑 (전체 폭) -->
+  <div class="pdt-strip">
+    <div class="alert-banner" id="alertBanner">
+      ⚠️ 네이버 API가 연결되지 않아 <strong>목업 데이터</strong>로 표시 중입니다.
+      <a href="#" onclick="openSetupModal(); return false">설정 방법 보기 →</a>
+    </div>
+    <div class="briefing" id="briefing"></div>
+  </div>
+
+  <!-- 사진형 5분할 그리드: 네비레일 · 상품탐색 · 분석 · AI · 액션 -->
+  <div class="pdt-grid pdt-grid5">
+    <!-- 좌측 네비게이션 레일 -->
+    <aside class="pdt-col rail">
+      <div class="pdt-col-title">🧭 탐색</div>
+      <div class="pdt-col-body">
+        <nav class="rail-menu">
+          <div class="rail-item active" onclick="document.getElementById('pdtSearch').focus()"><span class="ri-ico">🔍</span> 키워드 검색</div>
+          <div class="rail-item" onclick="document.querySelector('.pdt-grid').scrollIntoView({behavior:'smooth'})"><span class="ri-ico">📂</span> 카테고리 분석</div>
+          <div class="rail-item" onclick="openReport()"><span class="ri-ico">📈</span> 트렌드 리포트</div>
+          <div class="rail-item" onclick="openDrawer()"><span class="ri-ico">⭐</span> 관심 키워드</div>
+          <div class="rail-item" onclick="showToast('비교 분석은 다음 단계에서 제공됩니다')"><span class="ri-ico">📊</span> 비교 분석</div>
+        </nav>
+        <div class="rail-sec-h">카테고리 필터</div>
+        <div class="category-filter rail-cats">
+          <button class="cat-btn active" onclick="setCategory('all', this)">전체</button>
+          <button class="cat-btn" onclick="setCategory('food', this)">🍎 식품</button>
+          <button class="cat-btn" onclick="setCategory('beauty', this)">💄 뷰티</button>
+          <button class="cat-btn" onclick="setCategory('fashion', this)">👗 패션</button>
+          <button class="cat-btn" onclick="setCategory('home', this)">🏠 홈</button>
+          <button class="cat-btn" onclick="setCategory('kids', this)">🧸 유아</button>
+          <button class="cat-btn" onclick="setCategory('pet', this)">🐾 반려</button>
+          <button class="cat-btn" onclick="setCategory('digital', this)">📱 디지털</button>
+        </div>
+        <div class="rail-sec-h">상품 랭킹 · 기회순</div>
+        <div class="rail-rank" id="pdtRailRank"></div>
+      </div>
+    </aside>
+    <!-- ① 상품 탐색 -->
+    <section class="pdt-col explore">
+      <div class="pdt-col-title"><span class="col-no">①</span> 상품 탐색</div>
+      <div class="pdt-col-body" id="pdtLeft"></div>
+    </section>
+    <!-- ② 상품 분석 (KPI + 차트 + 상품 패널) -->
+    <section class="pdt-col center" id="pdtCenter"></section>
+    <!-- ③ AI 분석 리포트 -->
+    <section class="pdt-col right">
+      <div class="pdt-col-title"><span class="col-no">③</span> AI 분석 리포트</div>
+      <div class="pdt-col-body" id="pdtRight"></div>
+    </section>
+    <!-- ⑤ 액션 -->
+    <aside class="pdt-col action">
+      <div class="pdt-col-title"><span class="col-no">⑤</span> 액션</div>
+      <div class="pdt-col-body" id="pdtAction"></div>
+    </aside>
+  </div>
+
+  <!-- 하단: 리뷰·키워드·트렌드 차트 -->
+  <div class="pdt-bottom">
+    <div class="pdt-col-title">🔬 리뷰 · 키워드 · 트렌드</div>
+    <div id="pdtBottom"></div>
+  </div>
+
+  <!-- MD 상품 발굴 플라이휠 (Loop) -->
+  <div class="pdt-flywheel">
+    <div class="fw-title">🔄 MD 상품 발굴 플라이휠 <span class="fw-loop">Loop · 돌수록 정확</span></div>
+    <div class="fw-steps" id="pdtFlywheel"></div>
+  </div>
+
+  <!-- 레거시 요약 ID 보존(updateSummary 호환용, 화면 미표시) -->
+  <div style="display:none">
+    <span id="summaryKeywords"></span><span id="summaryKeywordsChange"></span>
+    <span id="summaryNew"></span><span id="summaryNewChange"></span>
+    <span id="summaryCategory"></span><span id="summaryCategoryChange"></span>
+    <span id="summarySelected"></span>
+  </div>
+
+</div>
+
+<!-- Drawer -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">📋 오늘의 선별 상품</div>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-footer">
+    <button class="btn-outline" onclick="clearSelected()">전체 해제</button>
+    <button class="btn-primary" onclick="exportTxt()">📤 TXT 내보내기</button>
+    <button class="btn-primary btn-sheets" id="sheetsBtn" onclick="saveToSheets()">📊 시트 저장</button>
+  </div>
+</div>
+
+<!-- Setup Modal -->
+<div class="modal-overlay hidden" id="setupModal" onclick="e => e.target === this && closeSetupModal()">
+  <div class="modal">
+    <h2>⚙️ API 연동 설정 가이드</h2>
+    <p class="sub">아래 순서대로 설정하면 실시간 데이터를 사용할 수 있습니다.</p>
+
+    <div class="setup-step">
+      <div class="step-num">Step 1 — 네이버 DataLab API</div>
+      <div class="step-title">🟢 쇼핑 트렌드 실시간 조회</div>
+      <div class="step-desc">
+        1. <a href="https://developers.naver.com" target="_blank">developers.naver.com</a> 로그인<br>
+        2. [Application] → [애플리케이션 등록]<br>
+        3. 사용 API: <strong>DataLab(검색어트렌드)</strong> 체크<br>
+        4. 발급된 <strong>Client ID / Secret</strong>을 <code>.env</code> 파일에 입력
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">Step 2 — Google Sheets 자동 저장</div>
+      <div class="step-title">📊 선별 목록 자동 기록</div>
+      <div class="step-desc">
+        1. <a href="https://sheets.new" target="_blank">sheets.new</a>에서 새 스프레드시트 생성<br>
+        2. [확장 프로그램] → [Apps Script] 열기<br>
+        3. <code>sheets-script.js</code> 파일 내용을 붙여넣기<br>
+        4. [배포] → [웹 앱으로 배포] → URL을 <code>.env</code>의 <code>GOOGLE_SHEETS_WEBHOOK</code>에 입력
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">Step 3 — 알리익스프레스 (중국 트렌드)</div>
+      <div class="step-title">🔴 알리·테무 실시간 인기 상품</div>
+      <div class="step-desc">
+        1. <a href="https://portals.aliexpress.com" target="_blank">portals.aliexpress.com</a> 어필리에이트 가입<br>
+        2. 승인 후 <strong>App Key / App Secret</strong> 발급 (1~3일 소요)<br>
+        3. <code>.env</code>의 <code>ALI_APP_KEY</code>, <code>ALI_APP_SECRET</code>에 입력<br>
+        <span style="color:var(--sub)">※ 테무는 공식 API가 없어 알리 데이터로 중국 직구 트렌드를 대표합니다.</span>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">Step 4 — 쿠팡 파트너스 (실시간 인기상품)</div>
+      <div class="step-title">🛒 골드박스 · 카테고리 베스트</div>
+      <div class="step-desc">
+        1. 쿠팡 파트너스 → <strong>오픈 API → 키 발급/관리</strong>에서 ACCESS/SECRET 키 발급<br>
+        2. Supabase Secrets에 <code>COUPANG_ACCESS_KEY</code>, <code>COUPANG_SECRET_KEY</code> 입력<br>
+        3. <code>api_cache</code> 테이블 생성(0002 SQL) 후 함수 재배포<br>
+        <span style="color:var(--sub)">※ 쿠팡은 호출 제한이 엄격해 30분 캐싱으로 안전하게 가져옵니다.</span>
+      </div>
+    </div>
+
+    <div class="setup-step">
+      <div class="step-num">Step 5 — 자동 시작 설정</div>
+      <div class="step-title">⏰ 매일 아침 자동 실행</div>
+      <div class="step-desc">
+        <code>start-auto.bat</code> 파일을 실행하면<br>
+        Windows 작업 스케줄러에 매일 오전 7:30 자동 시작이 등록됩니다.<br><br>
+        수동 시작: <code>npm start</code> → <code>http://localhost:3000</code>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeSetupModal()">닫기</button>
+      <button class="btn-primary" onclick="checkStatus()">연결 상태 확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 보고서 모달 -->
+<div class="report-overlay" id="reportOverlay" onclick="if(event.target===this)closeReport()">
+  <div class="report-modal">
+    <div class="report-top">
+      <div>
+        <div class="rt-title">📑 오늘의 트렌드 종합 보고서</div>
+        <div class="rt-date" id="reportDate"></div>
+      </div>
+      <button class="rt-close" onclick="closeReport()">✕</button>
+    </div>
+    <div class="report-body" id="reportBody"></div>
+    <div class="report-foot">
+      <button class="btn-outline" onclick="generateReport(this)">🔄 지금 새로 생성</button>
+      <button class="btn-primary" style="flex:none" onclick="closeReport()">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 리뷰 분석기 모달 -->
+<div class="report-overlay" id="reviewOverlay" onclick="if(event.target===this)closeReviewAnalyzer()">
+  <div class="report-modal">
+    <div class="report-top" style="background:linear-gradient(120deg,#0F9D58,#34C77B)">
+      <div>
+        <div class="rt-title">📝 리뷰 분석기</div>
+        <div class="rt-date">리뷰를 붙여넣으면 긍정·부정 키워드를 뽑아줍니다 · 무료(AI 미사용)</div>
+      </div>
+      <button class="rt-close" onclick="closeReviewAnalyzer()">✕</button>
+    </div>
+    <div class="report-body">
+      <input id="revProduct" class="note-area" style="min-height:auto;margin-bottom:10px" placeholder="상품명 (선택) — 예: 캠핑 선풍기" />
+      <textarea id="revInput" class="note-area" style="min-height:140px" placeholder="여기에 리뷰를 붙여넣으세요. 리뷰 한 건당 한 줄(엔터)로 구분하면 더 정확합니다.&#10;예)&#10;소음이 거의 없어서 너무 좋아요. 배터리도 오래가고 가성비 최고.&#10;무게가 좀 무겁고 충전이 느린 게 아쉬워요."></textarea>
+      <div id="revResult" style="margin-top:16px"></div>
+      <div id="revSaveRow" style="display:none;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <select id="revLinkSel" class="note-area" style="min-height:auto;flex:1;min-width:160px;padding:8px"></select>
+        <button class="btn-primary btn-sheets" style="flex:none" onclick="saveReviewAnalysis(this)">💾 저장</button>
+      </div>
+    </div>
+    <div class="report-foot">
+      <button class="btn-outline" onclick="showReviewHistory()">📚 이력</button>
+      <button class="btn-outline" onclick="document.getElementById('revInput').value='';document.getElementById('revResult').innerHTML='';document.getElementById('revSaveRow').style.display='none';">지우기</button>
+      <button class="btn-primary" style="flex:none" onclick="analyzeReviews()">🔍 분석하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== MOCK DATA =====
+const MOCK = {
+  coupang: {
+    daily: [
+      { id:'c1', name:'제주 감귤 5kg', category:'식품/건강', subCategory:'과일 > 감귤류', cat:'food', emoji:'🍊', trend:'up', change:'+23%', priceRange:'1.8만~2.5만원', target:'30~40대 주부', keywords:['제주감귤','산지직송','비타민C','겨울과일'], reason:'SNS 레시피 바이럴로 급상승. 비타민C 건강 관심과 맞물려 산지직송 상품 검색 폭증' },
+      { id:'c2', name:'콜라겐 젤리 스틱', category:'식품/건강', subCategory:'건강식품 > 콜라겐', cat:'food', emoji:'🍬', trend:'new', change:'NEW', priceRange:'2만~4만원', target:'20~40대 여성', keywords:['콜라겐','피부탄력','저분자콜라겐','뷰티푸드'], reason:'피부 개선 숏폼 콘텐츠 바이럴. 먹는 뷰티 카테고리 신규 급부상 중' },
+      { id:'c3', name:'에어팟 프로 케이스', category:'디지털/가전', subCategory:'IT액세서리 > 이어폰케이스', cat:'digital', emoji:'🎧', trend:'up', change:'+15%', priceRange:'5천~2만원', target:'10~30대 전체', keywords:['에어팟케이스','귀여운케이스','실리콘','맞춤케이스'], reason:'신학기·직장인 선물 수요. 에어팟 신제품 출시 후 호환 케이스 수요 급증' },
+      { id:'c4', name:'무형광 면 속옷 세트', category:'패션/의류', subCategory:'의류 > 이너웨어', cat:'fashion', emoji:'👕', trend:'up', change:'+12%', priceRange:'1.5만~3만원', target:'20~40대 MZ세대', keywords:['무형광속옷','유기농면','친환경의류','이너웨어'], reason:'환경·건강 관심 MZ세대 중심. 피부 민감도 증가로 무형광 소재 선호 지속 확산' },
+      { id:'c5', name:'강아지 관절영양제', category:'반려동물', subCategory:'반려동물용품 > 건강/영양', cat:'pet', emoji:'🐕', trend:'same', change:'=', priceRange:'2만~5만원', target:'30~50대 반려견 보호자', keywords:['강아지영양제','관절보호','글루코사민','노견케어'], reason:'노령견 인구 증가. 반려견 의료비 부담으로 예방 영양제 꾸준한 수요 유지 중' },
+      { id:'c6', name:'스타벅스 텀블러', category:'홈/리빙', subCategory:'주방용품 > 텀블러', cat:'home', emoji:'☕', trend:'down', change:'-5%', priceRange:'3만~6만원', target:'20~40대 직장인', keywords:['스타벅스텀블러','한정판','친환경','텀블러'], reason:'시즌 에디션 종료로 일시 하락. 신규 콜라보 출시 시 반등 가능성 높음' },
+      { id:'c7', name:'키즈 우산 공룡', category:'유아동', subCategory:'유아동 > 우산/우비', cat:'kids', emoji:'🦕', trend:'up', change:'+31%', priceRange:'1만~2만원', target:'30~40대 학부모', keywords:['어린이우산','공룡우산','장마우산','캐릭터우산'], reason:'장마철 시작으로 수요 폭증. 캐릭터 디자인 키즈 우산 품절 속출 중' },
+      { id:'c8', name:'흑임자 라떼 분말', category:'식품/건강', subCategory:'음료재료 > 분말라떼', cat:'food', emoji:'🖤', trend:'new', change:'NEW', priceRange:'1만~2만원', target:'20~40대 홈카페족', keywords:['흑임자라떼','홈카페','건강음료','블랙푸드'], reason:'홈카페 트렌드에 건강 식재료 결합. 인스타 레시피 바이럴로 신규 급부상' },
+      { id:'c9', name:'투명 지퍼백 대형', category:'홈/리빙', subCategory:'생활용품 > 정리/수납', cat:'home', emoji:'🛍️', trend:'up', change:'+9%', priceRange:'5천~1.5만원', target:'30~50대 주부', keywords:['지퍼백대형','냉동보관','식품보관','정리백'], reason:'냉동 식품 자체 소분 트렌드. 식비 절약·편의성 동시 추구 소비 패턴 반영' },
+      { id:'c10', name:'선크림 SPF50+', category:'뷰티/화장품', subCategory:'스킨케어 > 선케어', cat:'beauty', emoji:'🧴', trend:'up', change:'+18%', priceRange:'1만~3만원', target:'10~40대 전체', keywords:['선크림','SPF50','자외선차단','무기자차'], reason:'여름 자외선 지수 상승. 피부과 추천 제품 숏폼 바이럴로 특정 제품군 급상승' },
+    ],
+    weekly: [
+      { id:'c1w', name:'냉감 침구 세트', category:'홈/리빙', subCategory:'침구 > 여름이불', cat:'home', emoji:'🛏️', trend:'up', change:'+45%', priceRange:'3만~8만원', target:'20~50대 전체', keywords:['냉감이불','여름침구','아이스침구','시원한이불'], reason:'본격 폭염 시작으로 주간 최고 상승. 검색량과 구매전환율 동시 급상승 중' },
+      { id:'c2w', name:'탄산수 메이커', category:'홈/리빙', subCategory:'주방가전 > 음료메이커', cat:'home', emoji:'💧', trend:'up', change:'+33%', priceRange:'6만~15만원', target:'30~40대 홈카페족', keywords:['탄산수제조기','소다스트림','홈카페','제로음료'], reason:'제로음료 트렌드와 맞물려 집에서 직접 만드는 탄산수 수요 급증' },
+      { id:'c3w', name:'닭가슴살 큐브', category:'식품/건강', subCategory:'다이어트식품 > 단백질식품', cat:'food', emoji:'🍗', trend:'up', change:'+28%', priceRange:'1만~3만원', target:'20~40대 다이어트족', keywords:['닭가슴살','고단백','다이어트','헬스식단'], reason:'여름 바디프로필·다이어트 시즌 진입. 편의성 높은 큐브 형태가 MZ세대 공략 성공' },
+      { id:'c4w', name:'마스카라 롱래쉬', category:'뷰티/화장품', subCategory:'메이크업 > 마스카라', cat:'beauty', emoji:'💄', trend:'new', change:'NEW', priceRange:'1만~3만원', target:'10~30대 여성', keywords:['마스카라','롱래쉬','뷰티','아이메이크업'], reason:'유명 뷰티 유튜버 리뷰로 품절 사태. 신규 진입 상품으로 가파른 상승세' },
+      { id:'c5w', name:'어린이 비타민C', category:'유아동', subCategory:'유아건강 > 영양제', cat:'kids', emoji:'🍋', trend:'up', change:'+22%', priceRange:'1만~3만원', target:'30~40대 학부모', keywords:['어린이비타민','면역력','젤리비타민','어린이영양제'], reason:'환절기 면역 관리 관심 증가. 젤리 타입 복용 편의성으로 구매 장벽 낮아짐' },
+      { id:'c6w', name:'반려묘 캣타워', category:'반려동물', subCategory:'고양이용품 > 캣타워', cat:'pet', emoji:'🐱', trend:'same', change:'=', priceRange:'5만~20만원', target:'20~40대 고양이집사', keywords:['캣타워','고양이놀이터','스크래쳐','반려묘'], reason:'반려묘 가구 지속 증가로 꾸준한 수요 유지. 인테리어 결합형 프리미엄 제품 인기' },
+      { id:'c7w', name:'무선 충전 패드', category:'디지털/가전', subCategory:'IT액세서리 > 충전기', cat:'digital', emoji:'⚡', trend:'up', change:'+19%', priceRange:'1만~4만원', target:'10~40대 전체', keywords:['무선충전','고속충전','멀티충전','충전패드'], reason:'멀티 디바이스 동시 충전 수요. 책상 정리 트렌드와 맞물려 멀티충전패드 급상승' },
+      { id:'c8w', name:'린넨 와이드 팬츠', category:'패션/의류', subCategory:'하의 > 팬츠', cat:'fashion', emoji:'👖', trend:'up', change:'+16%', priceRange:'2만~5만원', target:'20~40대 여성', keywords:['린넨팬츠','와이드팬츠','여름팬츠','편안한룩'], reason:'여름 루즈핏 트렌드 지속. 재택·출근 겸용 편안한 실루엣 선호도 상승' },
+      { id:'c9w', name:'수박 슬라이서', category:'홈/리빙', subCategory:'주방용품 > 과일도구', cat:'home', emoji:'🍉', trend:'new', change:'NEW', priceRange:'1만~2만원', target:'30~50대 주부', keywords:['수박슬라이서','수박자르기','여름과일','키친툴'], reason:'여름 수박 시즌 시작. SNS 영상 바이럴로 신규 등장해 주방 필수템으로 자리잡는 중' },
+      { id:'c10w', name:'오메가3 프리미엄', category:'식품/건강', subCategory:'건강식품 > 오메가3', cat:'food', emoji:'🐟', trend:'up', change:'+11%', priceRange:'2만~5만원', target:'40~60대', keywords:['오메가3','혈관건강','rTG오메가3','건강기능식품'], reason:'중장년층 혈관 건강 관심 꾸준. 고순도 rTG 타입 고가 제품으로 프리미엄화 진행 중' },
+    ],
+    monthly: [
+      { id:'c1m', name:'에어컨 필터 교체', category:'홈/리빙', subCategory:'가전용품 > 에어컨용품', cat:'home', emoji:'❄️', trend:'up', change:'+67%', priceRange:'1만~3만원', target:'30~50대 가정', keywords:['에어컨필터','에어컨청소','필터교체','여름에어컨'], reason:'에어컨 가동 시즌 진입. 전년 대비 이른 더위로 필터 교체 수요 한 달 빠르게 시작' },
+      { id:'c2m', name:'자외선 차단 팔토시', category:'패션/의류', subCategory:'잡화 > 자외선차단용품', cat:'fashion', emoji:'💪', trend:'up', change:'+54%', priceRange:'5천~2만원', target:'30~50대 여성', keywords:['팔토시','자외선차단','쿨토시','야외활동'], reason:'야외 활동 증가 + 자외선 차단 관심 동반 상승. 기능성 냉감 소재 제품 선호 두드러짐' },
+      { id:'c3m', name:'냉장고 정리함', category:'홈/리빙', subCategory:'생활용품 > 수납/정리', cat:'home', emoji:'🧊', trend:'up', change:'+41%', priceRange:'1만~3만원', target:'30~50대 주부', keywords:['냉장고정리','수납함','냉장고수납','정리정돈'], reason:'정리 유튜브 영향으로 냉장고 정리 콘텐츠 바이럴. 여름 식재료 보관 수요와 맞물림' },
+      { id:'c4m', name:'프로틴 초코맛', category:'식품/건강', subCategory:'건강식품 > 단백질보충제', cat:'food', emoji:'💪', trend:'new', change:'NEW', priceRange:'3만~6만원', target:'20~40대 헬스족', keywords:['프로틴','단백질보충제','헬스식품','초코맛프로틴'], reason:'헬스장 회원 증가 + 바디프로필 트렌드. 초코맛 맛있는 프로틴 신제품으로 진입 성공' },
+      { id:'c5m', name:'썬글라스 오버사이즈', category:'패션/의류', subCategory:'패션잡화 > 선글라스', cat:'fashion', emoji:'😎', trend:'up', change:'+35%', priceRange:'1만~10만원', target:'20~40대 전체', keywords:['선글라스','오버사이즈','Y2K','여름선글라스'], reason:'Y2K 레트로 트렌드 지속. 오버사이즈 프레임이 SNS 코디 필수 아이템으로 등극' },
+      { id:'c6m', name:'캠핑 접이식 의자', category:'홈/리빙', subCategory:'캠핑용품 > 의자', cat:'home', emoji:'⛺', trend:'up', change:'+29%', priceRange:'2만~8만원', target:'30~50대 캠핑족', keywords:['캠핑의자','접이식의자','캠핑용품','아웃도어'], reason:'여름 캠핑 시즌 진입. 감성 캠핑 문화 확산으로 1인당 용품 구매 단가 지속 상승 중' },
+      { id:'c7m', name:'어린이 수영복', category:'유아동', subCategory:'유아동의류 > 수영복', cat:'kids', emoji:'🏊', trend:'up', change:'+48%', priceRange:'1만~3만원', target:'30~40대 학부모', keywords:['어린이수영복','키즈수영복','물놀이','방학수영'], reason:'여름방학 물놀이 시즌 진입. 키즈 수영복 래쉬가드 세트 수요 폭증. 품절 다수 발생' },
+      { id:'c8m', name:'반려견 쿨매트', category:'반려동물', subCategory:'반려동물 > 하우스/방석', cat:'pet', emoji:'🐾', trend:'up', change:'+55%', priceRange:'1만~4만원', target:'20~50대 반려견 보호자', keywords:['쿨매트','강아지쿨매트','여름반려동물','아이스매트'], reason:'폭염 속 반려견 체온 관리 필수. 매년 여름 최고 판매 시즌으로 이번 해 더욱 빠른 상승' },
+      { id:'c9m', name:'냉감 마스크', category:'패션/의류', subCategory:'잡화 > 마스크', cat:'fashion', emoji:'😷', trend:'same', change:'=', priceRange:'5천~1.5만원', target:'20~50대', keywords:['냉감마스크','여름마스크','쿨마스크','기능성마스크'], reason:'마스크 착용 문화 지속. 여름 냉감 기능 제품으로 매년 비슷한 수요 패턴 보임' },
+      { id:'c10m', name:'식용 얼음트레이', category:'홈/리빙', subCategory:'주방용품 > 제빙트레이', cat:'home', emoji:'🧊', trend:'up', change:'+22%', priceRange:'5천~2만원', target:'20~40대 전체', keywords:['얼음트레이','제빙트레이','홈파티','아이스큐브'], reason:'홈파티·홈카페 트렌드로 얼음 수요 증가. 대형 구형 얼음 트레이가 인스타 바이럴 중' },
+    ],
+    yearly: [
+      { id:'c1y', name:'공기청정기 필터', category:'홈/리빙', subCategory:'가전용품 > 공기청정기', cat:'home', emoji:'🌬️', trend:'up', change:'+120%', priceRange:'2만~5만원', target:'30~60대 가정', keywords:['공기청정기필터','미세먼지','헤파필터','실내공기'], reason:'미세먼지·바이러스 경계심 연중 유지. 소모품 정기구독 구매 패턴으로 전환 가속화' },
+      { id:'c2y', name:'전기에어프라이어', category:'홈/리빙', subCategory:'주방가전 > 에어프라이어', cat:'home', emoji:'🍳', trend:'up', change:'+89%', priceRange:'5만~15만원', target:'20~50대 전체', keywords:['에어프라이어','오일리스조리','홈쿡','주방가전'], reason:'기름 없는 건강 조리 트렌드 정착. 1인 가구 증가로 소형 모델 수요 폭발적 증가' },
+      { id:'c3y', name:'건강기능식품 세트', category:'식품/건강', subCategory:'건강식품 > 선물세트', cat:'food', emoji:'💊', trend:'up', change:'+76%', priceRange:'3만~10만원', target:'40~60대 및 선물구매자', keywords:['건강기능식품','선물세트','부모님선물','홍삼'], reason:'건강 선물 문화 정착. 명절·생일 외 평상시 건강 챙기기 선물 수요도 연중 고르게 분포' },
+      { id:'c4y', name:'무선 이어폰', category:'디지털/가전', subCategory:'음향기기 > 이어폰', cat:'digital', emoji:'🎵', trend:'up', change:'+65%', priceRange:'2만~30만원', target:'10~40대 전체', keywords:['무선이어폰','블루투스이어폰','노캔이어폰','TWS'], reason:'유선 완전 대체. 노이즈캔슬링·통화 품질 개선으로 가격대별 전 세대 구매 층 확보' },
+      { id:'c5y', name:'요가 매트 세트', category:'홈/리빙', subCategory:'스포츠용품 > 요가/필라테스', cat:'home', emoji:'🧘', trend:'up', change:'+58%', priceRange:'2만~8만원', target:'20~50대 여성', keywords:['요가매트','홈트','필라테스','운동매트'], reason:'홈트레이닝 트렌드 지속. 필라테스 인기 확산으로 고급형 두꺼운 매트 수요 증가' },
+      { id:'c6y', name:'유기농 이유식', category:'유아동', subCategory:'유아식품 > 이유식', cat:'kids', emoji:'👶', trend:'up', change:'+49%', priceRange:'2만~5만원', target:'30대 신혼·육아 가정', keywords:['유기농이유식','이유식','첫이유식','유아식'], reason:'출생아 감소에도 1인당 육아비 지출 증가. 유기농·프리미엄 이유식 선호 강해짐' },
+      { id:'c7y', name:'반려동물 보험', category:'반려동물', subCategory:'반려동물 > 보험/의료', cat:'pet', emoji:'🐶', trend:'new', change:'NEW', priceRange:'월 2만~5만원', target:'20~40대 반려동물 보호자', keywords:['펫보험','반려동물보험','강아지보험','고양이보험'], reason:'펫보험 의무화 논의·병원비 급등으로 보험 가입 폭발적 증가. 비교·가입 상품 신규 급부상' },
+      { id:'c8y', name:'전동 칫솔', category:'뷰티/화장품', subCategory:'구강케어 > 전동칫솔', cat:'beauty', emoji:'🪥', trend:'up', change:'+43%', priceRange:'3만~20만원', target:'20~50대 전체', keywords:['전동칫솔','구강케어','음파칫솔','스마트칫솔'], reason:'구강 건강 관심도 급상승. 치과비 절감 목적 예방 관리 트렌드로 전동칫솔 표준화 중' },
+      { id:'c9y', name:'텀블러/보틀', category:'홈/리빙', subCategory:'주방용품 > 텀블러', cat:'home', emoji:'🫙', trend:'up', change:'+37%', priceRange:'1만~5만원', target:'10~40대 전체', keywords:['텀블러','보온보냉','스탠리','친환경'], reason:'일회용컵 규제 강화 + 친환경 소비 확산. 스탠리·스탈로 등 프리미엄 브랜드 수혜 집중' },
+      { id:'c10y', name:'리유저블 백', category:'패션/의류', subCategory:'잡화 > 에코백', cat:'fashion', emoji:'🛍️', trend:'up', change:'+31%', priceRange:'5천~3만원', target:'20~40대 MZ세대', keywords:['에코백','리유저블백','친환경가방','장바구니'], reason:'비닐봉투 사용 규제 및 환경 소비 트렌드. 브랜드 콜라보 에코백 컬렉션 아이템으로 진화' },
+    ]
+  },
+  instagram: {
+    daily: [
+      { id:'i1', name:'#오트밀볼 레시피', category:'식품/건강', subCategory:'건강식 > 아침식사', cat:'food', emoji:'🥣', trend:'up', change:'+3.2만 좋아요', priceRange:'재료비 5천~1만원', target:'20~30대 건강관심족', keywords:['오트밀','건강아침식사','다이어트식단','글루텐프리'], reason:'홈트+건강식 루틴 영상 바이럴. 오트밀볼 레시피가 릴스로 확산되며 관련 재료 검색 동반 급증' },
+      { id:'i2', name:'#여름네일아트', category:'뷰티/화장품', subCategory:'네일 > 여름디자인', cat:'beauty', emoji:'💅', trend:'up', change:'+1.8만 저장', priceRange:'셀프네일 1만~3만원', target:'10~30대 여성', keywords:['네일아트','여름네일','젤네일','셀프네일'], reason:'여름 휴가 시즌 전 네일 관심 폭증. 셀프네일 재료 구매 전환율 높은 콘텐츠 유형' },
+      { id:'i3', name:'#오늘뭐입지', category:'패션/의류', subCategory:'데일리 패션 > 코디', cat:'fashion', emoji:'👗', trend:'up', change:'+2.4만 해시태그', priceRange:'코디별 상이', target:'20~30대 전체', keywords:['오오티디','데일리룩','코디추천','여름코디'], reason:'출근룩·일상코디 공유 문화 정착. 패션 앱·쇼핑몰 연동 구매로 이어지는 전환율 높음' },
+      { id:'i4', name:'#냉장고파먹기', category:'식품/건강', subCategory:'절약요리 > 냉장고활용', cat:'food', emoji:'🥬', trend:'new', change:'NEW 급상승', priceRange:'기존 식재료 활용', target:'20~40대 1인가구', keywords:['냉파요리','절약레시피','남은재료요리','집밥'], reason:'물가 상승 영향으로 절약 요리 콘텐츠 신규 폭발. 냉장고 속 재료 활용 레시피 저장 수 급증' },
+      { id:'i5', name:'#북유럽인테리어', category:'홈/리빙', subCategory:'홈인테리어 > 스칸디나비안', cat:'home', emoji:'🪴', trend:'up', change:'+1.1만 저장', priceRange:'소품 5천~5만원', target:'20~40대 인테리어 관심층', keywords:['북유럽인테리어','미니멀인테리어','화이트인테리어','홈스타그램'], reason:'집꾸미기 관심 지속. 화이트·우드톤 조합 북유럽 스타일 소품 구매로 이어지는 패턴 명확' },
+      { id:'i6', name:'#고양이일상', category:'반려동물', subCategory:'반려묘 > 일상기록', cat:'pet', emoji:'😸', trend:'same', change:'꾸준 유지', priceRange:'고양이 용품 전반', target:'20~40대 고양이집사', keywords:['냥스타그램','고양이','집사일상','냥이'], reason:'반려묘 콘텐츠 연중 안정적 인기. 고양이 간식·용품 브랜드 광고 채널로 활발히 활용 중' },
+      { id:'i7', name:'#갓생루틴', category:'식품/건강', subCategory:'자기계발 > 생활루틴', cat:'food', emoji:'⏰', trend:'up', change:'+2.9만 조회', priceRange:'루틴 용품 1만~5만원', target:'20대 MZ세대', keywords:['갓생','아침루틴','생산성','모닝루틴'], reason:'생산적인 하루 공유 문화. 아침 루틴 영상에 등장하는 제품(플래너·건강식품) 구매 전환율 높음' },
+      { id:'i8', name:'#피부관리루틴', category:'뷰티/화장품', subCategory:'스킨케어 > 데일리루틴', cat:'beauty', emoji:'✨', trend:'up', change:'+1.5만 저장', priceRange:'스킨케어 세트 3만~10만원', target:'20~40대 여성', keywords:['스킨케어루틴','피부관리','토너패드','세럼'], reason:'피부과 원장·에스테틱 스킨케어 루틴 공유 콘텐츠 바이럴. 추천 제품 직접 구매 전환 강함' },
+      { id:'i9', name:'#아이방꾸미기', category:'유아동', subCategory:'육아인테리어 > 아이방', cat:'kids', emoji:'🧸', trend:'up', change:'+0.8만 저장', priceRange:'소품 1만~10만원', target:'30대 육아 가정', keywords:['아이방인테리어','키즈룸','육아인테리어','어린이방'], reason:'감성 육아 트렌드. 아이방 꾸미기 콘텐츠가 육아용품·인테리어 소품 구매로 직결됨' },
+      { id:'i10', name:'#친환경제품', category:'홈/리빙', subCategory:'에코라이프 > 친환경용품', cat:'home', emoji:'🌱', trend:'up', change:'+1.3만 해시태그', priceRange:'제품별 상이', target:'20~40대 가치소비층', keywords:['친환경','제로웨이스트','에코제품','지속가능'], reason:'가치소비 MZ세대 중심 확산. 친환경 인증 제품 태그 공유 문화로 브랜드 자연스러운 노출' },
+    ],
+    weekly: [
+      { id:'i1w', name:'#여름휴가룩', category:'패션/의류', subCategory:'바캉스패션 > 전체', cat:'fashion', emoji:'🌊', trend:'up', change:'+12.4만 해시태그', priceRange:'세트 5만~15만원', target:'20~30대 여성', keywords:['바캉스룩','여름휴가','비치웨어','리조트룩'], reason:'여름 휴가철 진입. 바캉스 코디 숏폼 콘텐츠 폭발적 증가. 쇼핑몰 연동 구매 전환 시즌 최고' },
+      { id:'i2w', name:'#수영장스타그램', category:'패션/의류', subCategory:'수영복 > 비키니/래쉬가드', cat:'fashion', emoji:'🏊', trend:'up', change:'+8.7만 게시물', priceRange:'1만~5만원', target:'20~30대 전체', keywords:['수영복','래쉬가드','비키니','워터파크'], reason:'워터파크·수영장 방문 콘텐츠 급증. 수영복 착용 사진 공유로 특정 브랜드·디자인 바이럴 확산' },
+      { id:'i3w', name:'#키토식단', category:'식품/건강', subCategory:'다이어트식 > 저탄고지', cat:'food', emoji:'🥑', trend:'new', change:'NEW 진입', priceRange:'식재료 주 5만~10만원', target:'20~40대 다이어트족', keywords:['키토제닉','저탄고지','키토다이어트','아보카도'], reason:'여름 다이어트 시즌 맞물려 키토 식단 신규 급부상. 아보카도·치즈 관련 식재료 구매 전환 높음' },
+      { id:'i4w', name:'#샌달코디', category:'패션/의류', subCategory:'신발 > 샌들', cat:'fashion', emoji:'👡', trend:'up', change:'+5.2만 저장', priceRange:'1만~10만원', target:'20~40대 여성', keywords:['샌달','여름신발','스트랩샌달','슬리퍼코디'], reason:'여름 발 패션 관심 급증. 스트랩·플랫폼 샌들 코디 콘텐츠가 구체적 제품 구매로 연결' },
+      { id:'i5w', name:'#집사생활', category:'반려동물', subCategory:'반려묘 > 생활용품', cat:'pet', emoji:'🐱', trend:'up', change:'+3.8만 해시태그', priceRange:'고양이 용품 전반', target:'20~40대 고양이집사', keywords:['집사','고양이용품','캣푸드','간식추천'], reason:'고양이 집사 커뮤니티 활성화. 용품·간식 추천 릴스가 실구매로 연결되는 구조 명확' },
+      { id:'i6w', name:'#오가닉육아', category:'유아동', subCategory:'육아 > 유기농/친환경', cat:'kids', emoji:'🌿', trend:'up', change:'+2.1만 저장', priceRange:'프리미엄 유기농 제품', target:'30대 육아맘', keywords:['유기농육아','오가닉베이비','천연육아','무형광기저귀'], reason:'프리미엄 육아 소비 트렌드. 유기농 인증 육아용품 콘텐츠 저장·공유 지속 증가 중' },
+      { id:'i7w', name:'#홈바만들기', category:'홈/리빙', subCategory:'홈인테리어 > 홈바', cat:'home', emoji:'🍹', trend:'new', change:'NEW 급진입', priceRange:'셋업 10만~50만원', target:'30~40대 홈파티족', keywords:['홈바','홈파티','칵테일','인테리어바'], reason:'홈파티 문화 확산으로 홈바 인테리어 신규 트렌드 형성. 관련 용품·주류 구매 동반 증가' },
+      { id:'i8w', name:'#썬쿠션추천', category:'뷰티/화장품', subCategory:'선케어 > 쿠션선크림', cat:'beauty', emoji:'☀️', trend:'up', change:'+4.6만 조회', priceRange:'2만~5만원', target:'20~40대 여성', keywords:['썬쿠션','선크림추천','자외선차단쿠션','비건선크림'], reason:'여름 자외선 시즌. 뷰티 인플루언서 실사용 리뷰로 특정 제품 품절 사태 반복 발생 중' },
+      { id:'i9w', name:'#러닝크루', category:'식품/건강', subCategory:'스포츠 > 러닝', cat:'food', emoji:'🏃', trend:'up', change:'+6.9만 해시태그', priceRange:'러닝화·의류 10만~20만원', target:'20~40대 전체', keywords:['러닝','러닝크루','마라톤','러닝화추천'], reason:'러닝 커뮤니티 문화 급성장. 크루 인증샷 문화로 러닝화·의류 구체적 브랜드 구매 전환 강함' },
+      { id:'i10w', name:'#미니멀라이프', category:'홈/리빙', subCategory:'생활 > 미니멀리즘', cat:'home', emoji:'🤍', trend:'up', change:'+3.3만 저장', priceRange:'정리용품 1만~5만원', target:'20~40대 전체', keywords:['미니멀라이프','정리정돈','미니멀인테리어','비움'], reason:'과소비 반성 문화 확산. 물건 줄이기·정리 콘텐츠가 역설적으로 정리용품 구매 전환으로 이어짐' },
+    ],
+    monthly: [
+      { id:'i1m', name:'#6월여행', category:'홈/리빙', subCategory:'여행 > 국내외', cat:'home', emoji:'✈️', trend:'up', change:'+45만 게시물', priceRange:'여행용품 전반', target:'20~40대 전체', keywords:['여름여행','국내여행','제주도','해외여행'], reason:'여름 성수기 여행 콘텐츠 폭발. 여행 가방·용품·의류 등 연관 제품 구매 전환 시즌 최고조' },
+      { id:'i2m', name:'#바디포지티브', category:'패션/의류', subCategory:'가치관 > 자기수용', cat:'fashion', emoji:'💪', trend:'up', change:'+28만 릴스', priceRange:'다양한 사이즈 의류', target:'20~40대 여성', keywords:['바디포지티브','자기사랑','있는그대로','플러스사이즈'], reason:'다양성 존중 문화 확산. 빅사이즈·인클루시브 브랜드 노출 증가. 구매 전환보다 브랜드 인식 제고 효과 큼' },
+      { id:'i3m', name:'#그린스무디', category:'식품/건강', subCategory:'건강음료 > 스무디', cat:'food', emoji:'🥤', trend:'up', change:'+19만 조회', priceRange:'믹서기+재료 5만~15만원', target:'20~40대 건강관심층', keywords:['그린스무디','채소스무디','디톡스','건강음료'], reason:'여름 다이어트·디톡스 시즌. 스무디 레시피 영상이 블렌더·재료 구매로 직접 전환됨' },
+      { id:'i4m', name:'#나혼자캠핑', category:'홈/리빙', subCategory:'캠핑 > 솔로캠핑', cat:'home', emoji:'⛺', trend:'up', change:'+22만 해시태그', priceRange:'장비 20만~100만원', target:'30~40대 1인가구', keywords:['솔로캠핑','혼캠','감성캠핑','캠핑장비'], reason:'1인 캠핑 문화 정착. 감성 솔로캠핑 콘텐츠 확산으로 경량·미니멀 캠핑 장비 구매 급증' },
+      { id:'i5m', name:'#린넨패션', category:'패션/의류', subCategory:'소재별 패션 > 린넨', cat:'fashion', emoji:'🌾', trend:'up', change:'+16만 저장', priceRange:'2만~8만원', target:'20~40대 여성', keywords:['린넨','린넨셔츠','린넨팬츠','여름소재'], reason:'여름 소재 트렌드의 왕. 편안하고 시원한 린넨 착장 코디 콘텐츠 저장 수 월간 최고 수준' },
+      { id:'i6m', name:'#육아브이로그', category:'유아동', subCategory:'육아콘텐츠 > 일상기록', cat:'kids', emoji:'👶', trend:'up', change:'+11만 조회', priceRange:'육아용품 전반', target:'30대 육아 가정', keywords:['육아브이로그','육아일상','아기일상','육아템'], reason:'육아 경험 공유 문화 정착. 영상 속 등장 제품(기저귀·유모차·장난감) 직접 구매 전환율 높음' },
+      { id:'i7m', name:'#반려견여행', category:'반려동물', subCategory:'반려동물 > 여행', cat:'pet', emoji:'🐕', trend:'new', change:'NEW 급부상', priceRange:'펫 여행용품 5만~20만원', target:'20~40대 반려견 보호자', keywords:['펫여행','강아지여행','반려견동반','펫프렌들리'], reason:'펫투어리즘 트렌드 신규 형성. 반려견 동반 숙소·카페 콘텐츠 급증. 여행용 케이지·용품 구매 전환' },
+      { id:'i8m', name:'#선케어루틴', category:'뷰티/화장품', subCategory:'스킨케어 > 선케어', cat:'beauty', emoji:'🧴', trend:'up', change:'+14만 릴스', priceRange:'선케어 라인 3만~10만원', target:'20~40대 여성', keywords:['선케어','자외선차단','선크림루틴','여름피부'], reason:'여름 피부 관리 관심 최고조. 피부과 의사·에스테틱 선케어 루틴 영상이 제품 구매로 직결' },
+      { id:'i9m', name:'#갓생챌린지', category:'식품/건강', subCategory:'자기계발 > 챌린지', cat:'food', emoji:'🏆', trend:'up', change:'+33만 참여', priceRange:'루틴 용품 다양', target:'20대 MZ세대', keywords:['갓생챌린지','30일챌린지','습관형성','자기계발'], reason:'SNS 챌린지 참여 문화. 30일 챌린지 인증 콘텐츠로 플래너·운동용품·건강식 구매 동반 증가' },
+      { id:'i10m', name:'#빈티지홈데코', category:'홈/리빙', subCategory:'홈인테리어 > 빈티지', cat:'home', emoji:'🪴', trend:'up', change:'+9만 저장', priceRange:'소품 1만~10만원', target:'20~40대 인테리어 관심층', keywords:['빈티지인테리어','레트로','앤틱소품','감성인테리어'], reason:'레트로 트렌드 지속. 중고거래 앱과 연계된 빈티지 소품 거래 활성화. 신규 빈티지 소품 구매도 증가' },
+    ],
+    yearly: [
+      { id:'i1y', name:'#오운완', category:'식품/건강', subCategory:'운동 > 홈트/헬스', cat:'food', emoji:'💪', trend:'up', change:'+890만 게시물', priceRange:'운동용품 전반', target:'20~40대 전체', keywords:['오늘운동완료','헬스','홈트','운동인증'], reason:'연간 메가 트렌드로 완전 정착. 운동 인증 문화로 운동복·용품·보충제 연중 꾸준한 구매 전환' },
+      { id:'i2y', name:'#스몰럭셔리', category:'패션/의류', subCategory:'소비트렌드 > 소확행', cat:'fashion', emoji:'✨', trend:'up', change:'+560만 게시물', priceRange:'명품 소품 10만~50만원', target:'20~40대 전체', keywords:['스몰럭셔리','소확행','명품지갑','하이엔드'], reason:'불경기 역설적 럭셔리 소비. 고가 브랜드 소품(지갑·향수) 구매 인증 콘텐츠 연중 증가세' },
+      { id:'i3y', name:'#제로웨이스트', category:'홈/리빙', subCategory:'에코라이프 > 쓰레기줄이기', cat:'home', emoji:'♻️', trend:'up', change:'+430만 게시물', priceRange:'친환경 용품 전반', target:'20~40대 가치소비층', keywords:['제로웨이스트','친환경','지속가능','업사이클링'], reason:'환경 가치소비 트렌드 지속. 친환경 인증 제품 구매 인증 문화로 브랜드 자연스러운 마케팅 채널화' },
+      { id:'i4y', name:'#홈카페', category:'식품/건강', subCategory:'홈카페 > 커피/음료', cat:'food', emoji:'☕', trend:'up', change:'+780만 게시물', priceRange:'장비 10만~50만원', target:'20~40대 전체', keywords:['홈카페','커피머신','라떼아트','커피용품'], reason:'카페 물가 상승 + 홈카페 진입 장벽 하락. 커피 머신·원두·시럽 등 연관 제품 연중 꾸준한 최상위' },
+      { id:'i5y', name:'#퍼스널컬러', category:'뷰티/화장품', subCategory:'뷰티 > 색채분석', cat:'beauty', emoji:'🎨', trend:'up', change:'+650만 게시물', priceRange:'진단 서비스+화장품', target:'10~40대 여성', keywords:['퍼스널컬러','봄웜','여름쿨','색채진단'], reason:'뷰티 개인화 트렌드 정착. 퍼스컬 진단 후 추천 색상 화장품·의류 구매 전환율 매우 높음' },
+      { id:'i6y', name:'#강아지맞이', category:'반려동물', subCategory:'반려동물 > 입양/분양', cat:'pet', emoji:'🐾', trend:'up', change:'+320만 게시물', priceRange:'초기 용품 세트 30만~100만원', target:'20~40대 전체', keywords:['강아지입양','댕댕이','첫강아지','강아지용품'], reason:'반려견 인구 지속 증가. 신규 반려견 입양 시 용품 세트 구매로 이어지는 전환율 최고 수준' },
+      { id:'i7y', name:'#키즈카페투어', category:'유아동', subCategory:'육아 > 체험활동', cat:'kids', emoji:'🎠', trend:'up', change:'+280만 게시물', priceRange:'입장료+식음료', target:'30대 육아 가정', keywords:['키즈카페','아이와함께','주말나들이','체험육아'], reason:'체험형 육아 문화 확산. 키즈카페 방문 인증 콘텐츠로 어린이 의류·신발 코디 구매 전환 동반' },
+      { id:'i8y', name:'#재테크공부', category:'디지털/가전', subCategory:'자기계발 > 금융/투자', cat:'digital', emoji:'📊', trend:'new', change:'NEW 메가트렌드', priceRange:'도서·강의 1만~10만원', target:'20~40대 전체', keywords:['재테크','주식','부동산','경제공부'], reason:'경제 불확실성 증가로 재테크 관심 폭발적 증가. 관련 도서·강의·앱 구매 전환 연간 최고 신규 트렌드' },
+      { id:'i9y', name:'#극한도전', category:'식품/건강', subCategory:'스포츠 > 익스트림', cat:'food', emoji:'🏔️', trend:'up', change:'+210만 게시물', priceRange:'장비·의류 20만~100만원', target:'20~40대 남성', keywords:['등산','트레일런닝','익스트림스포츠','아웃도어'], reason:'MZ세대 아웃도어 붐. 등산·트레킹·극한 도전 콘텐츠로 고기능성 아웃도어 용품 구매 전환 강함' },
+      { id:'i10y', name:'#나만의공간', category:'홈/리빙', subCategory:'홈인테리어 > 개인공간', cat:'home', emoji:'🏠', trend:'up', change:'+390만 게시물', priceRange:'인테리어 용품 다양', target:'20~40대 전체', keywords:['인테리어','나만의공간','방꾸미기','홈스타그램'], reason:'1인 가구 증가 + 집에서 보내는 시간 증가. 개인 공간 꾸미기 투자 의향 연간 최고 수준 유지' },
+    ]
+  },
+  china: {
+    daily: [
+      { id:'cn1', name:'미니 휴대용 선풍기 (USB충전)', source:'알리', category:'디지털/가전', subCategory:'계절가전 > 선풍기', cat:'digital', emoji:'🌀', trend:'up', change:'+340%', price:4200, priceText:'4,200원', originalPrice:8900, discount:'53%', salesVolume:48200, rating:'4.7', keywords:['미니선풍기','휴대용선풍기','USB선풍기'], reason:'여름 시즌 알리 판매량 1위. 초저가에 한국 직구족·도매 사입 폭증' },
+      { id:'cn2', name:'네일 스티커 100종 세트', source:'알리', category:'뷰티/화장품', subCategory:'네일 > 스티커', cat:'beauty', emoji:'💅', trend:'up', change:'+210%', price:1800, priceText:'1,800원', originalPrice:5000, discount:'64%', salesVolume:33500, rating:'4.6', keywords:['네일스티커','셀프네일','네일아트'], reason:'셀프네일 트렌드 + 초저가. 인스타 #여름네일과 연동돼 사입 수요 급증' },
+      { id:'cn3', name:'아이스 쿨링 타월 3매', source:'테무', category:'스포츠/레저', subCategory:'아웃도어 > 쿨용품', cat:'home', emoji:'🧊', trend:'new', change:'NEW', price:2500, priceText:'2,500원', originalPrice:6900, discount:'63%', salesVolume:12800, rating:'4.5', keywords:['쿨타월','냉감타월','여름필수'], reason:'테무 신규 급상승. 폭염 대비 초저가 쿨용품 한국 도매 관심 집중' },
+      { id:'cn4', name:'다이소풍 수납 정리함 세트', source:'알리', category:'홈/리빙', subCategory:'수납 > 정리함', cat:'home', emoji:'🗄️', trend:'up', change:'+125%', price:3300, priceText:'3,300원', originalPrice:7800, discount:'58%', salesVolume:27100, rating:'4.4', keywords:['수납함','정리함','다이소'], reason:'국내 생활용품점 대비 절반가. 정리정돈 트렌드와 맞물려 사입 인기' },
+      { id:'cn5', name:'강아지 쿨매트 (젤타입)', source:'테무', category:'반려동물', subCategory:'반려동물 > 여름용품', cat:'pet', emoji:'🐾', trend:'up', change:'+178%', price:5900, priceText:'5,900원', originalPrice:14000, discount:'58%', salesVolume:9400, rating:'4.3', keywords:['강아지쿨매트','펫쿨매트','여름반려동물'], reason:'폭염 펫케어 수요. 국내가 1/3 수준으로 직구·재판매 동시 증가' },
+      { id:'cn6', name:'무선 블루투스 이어폰 (가성비)', source:'알리', category:'디지털/가전', subCategory:'음향 > 이어폰', cat:'digital', emoji:'🎧', trend:'up', change:'+92%', price:8900, priceText:'8,900원', originalPrice:19000, discount:'53%', salesVolume:62000, rating:'4.5', keywords:['무선이어폰','블루투스','가성비이어폰'], reason:'알리 전자 카테고리 스테디셀러. 초저가 TWS 한국 재판매 마진 높음' },
+      { id:'cn7', name:'여름 린넨 셔츠 (유니섹스)', source:'테무', category:'패션/의류', subCategory:'상의 > 셔츠', cat:'fashion', emoji:'👔', trend:'up', change:'+143%', price:7200, priceText:'7,200원', originalPrice:18000, discount:'60%', salesVolume:15600, rating:'4.2', keywords:['린넨셔츠','여름셔츠','유니섹스'], reason:'테무 패션 급상승. SPA 대비 초저가로 무신사 리셀러 사입 증가' },
+      { id:'cn8', name:'실리콘 주방 도구 12종', source:'알리', category:'홈/리빙', subCategory:'주방 > 조리도구', cat:'home', emoji:'🍳', trend:'same', change:'=', price:6500, priceText:'6,500원', originalPrice:15000, discount:'56%', salesVolume:21000, rating:'4.6', keywords:['실리콘주방도구','조리도구세트','주방용품'], reason:'주방용품 꾸준한 직구 인기. 묶음 구성 가성비로 재판매 수요 안정적' },
+      { id:'cn9', name:'유아 실리콘 식판 (흡착)', source:'알리', category:'유아동', subCategory:'유아식기 > 식판', cat:'kids', emoji:'🍽️', trend:'up', change:'+88%', price:4800, priceText:'4,800원', originalPrice:11000, discount:'56%', salesVolume:18300, rating:'4.7', keywords:['유아식판','실리콘식판','이유식기'], reason:'육아 직구 스테디. 국내 브랜드 1/4 가격으로 맘카페 공동구매 활발' },
+      { id:'cn10', name:'LED 무드등 (충전식)', source:'테무', category:'홈/리빙', subCategory:'조명 > 무드등', cat:'home', emoji:'💡', trend:'new', change:'NEW', price:3900, priceText:'3,900원', originalPrice:9900, discount:'61%', salesVolume:8700, rating:'4.4', keywords:['무드등','LED조명','인테리어소품'], reason:'테무 인테리어 소품 신규 인기. 감성 인테리어 트렌드로 사입 문의 증가' },
+    ],
+    weekly: [
+      { id:'cn1w', name:'미니 가습기 (탁상용)', source:'알리', category:'디지털/가전', subCategory:'계절가전 > 가습기', cat:'digital', emoji:'💨', trend:'up', change:'+260%', price:5500, priceText:'5,500원', originalPrice:13000, discount:'58%', salesVolume:41000, rating:'4.5', keywords:['미니가습기','탁상가습기','USB가습기'], reason:'주간 급상승. 에어컨 건조함 대비 수요로 직구·재판매 동반 증가' },
+      { id:'cn2w', name:'여름 쿨링 침대 패드', source:'테무', category:'홈/리빙', subCategory:'침구 > 패드', cat:'home', emoji:'🛏️', trend:'up', change:'+195%', price:9800, priceText:'9,800원', originalPrice:25000, discount:'61%', salesVolume:17200, rating:'4.3', keywords:['쿨패드','냉감패드','여름침구'], reason:'국내 냉감침구 대비 초저가. 폭염 시즌 주간 판매 폭증' },
+      { id:'cn3w', name:'휴대용 미니 선풍기 목걸이형', source:'알리', category:'디지털/가전', subCategory:'계절가전 > 선풍기', cat:'digital', emoji:'🌬️', trend:'up', change:'+220%', price:6200, priceText:'6,200원', originalPrice:14000, discount:'56%', salesVolume:38500, rating:'4.6', keywords:['넥선풍기','목걸이선풍기','핸즈프리'], reason:'야외활동 필수템. 핸즈프리 디자인으로 주간 직구 베스트' },
+      { id:'cn4w', name:'방수 폰케이스 (물놀이용)', source:'테무', category:'디지털/가전', subCategory:'IT액세서리 > 케이스', cat:'digital', emoji:'📱', trend:'new', change:'NEW', price:1500, priceText:'1,500원', originalPrice:4500, discount:'67%', salesVolume:22000, rating:'4.4', keywords:['방수폰케이스','물놀이','워터파크'], reason:'여름 물놀이 시즌 신규 폭발. 초저가로 대량 사입 문의 급증' },
+      { id:'cn5w', name:'썬캡 모자 (자외선차단)', source:'알리', category:'패션/의류', subCategory:'잡화 > 모자', cat:'fashion', emoji:'🧢', trend:'up', change:'+167%', price:3200, priceText:'3,200원', originalPrice:8000, discount:'60%', salesVolume:19800, rating:'4.2', keywords:['썬캡','자외선차단모자','여름모자'], reason:'야외 자외선 차단 수요. 골프·등산용으로 재판매 인기' },
+      { id:'cn6w', name:'미니 빔프로젝터 (가정용)', source:'알리', category:'디지털/가전', subCategory:'영상가전 > 프로젝터', cat:'digital', emoji:'📽️', trend:'up', change:'+134%', price:32000, priceText:'32,000원', originalPrice:69000, discount:'54%', salesVolume:8200, rating:'4.1', keywords:['미니빔','빔프로젝터','홈시네마'], reason:'홈시네마 트렌드. 국내가 절반 수준으로 직구 수요 꾸준' },
+      { id:'cn7w', name:'아기 모기장 텐트', source:'테무', category:'유아동', subCategory:'유아용품 > 모기장', cat:'kids', emoji:'🦟', trend:'new', change:'NEW', price:7800, priceText:'7,800원', originalPrice:18000, discount:'57%', salesVolume:6900, rating:'4.5', keywords:['아기모기장','유아모기장','여름육아'], reason:'여름 육아 신규템. 모기 시즌 맘카페 공동구매 시작' },
+      { id:'cn8w', name:'실리콘 얼음틀 (대형 구형)', source:'알리', category:'홈/리빙', subCategory:'주방 > 제빙', cat:'home', emoji:'🧊', trend:'up', change:'+98%', price:2200, priceText:'2,200원', originalPrice:5500, discount:'60%', salesVolume:24500, rating:'4.6', keywords:['얼음틀','구형얼음','홈카페'], reason:'홈카페 트렌드. 인스타 바이럴로 초저가 사입 인기' },
+      { id:'cn9w', name:'캠핑 LED 랜턴 (충전식)', source:'테무', category:'스포츠/레저', subCategory:'캠핑 > 조명', cat:'home', emoji:'🏮', trend:'up', change:'+156%', price:5400, priceText:'5,400원', originalPrice:13000, discount:'58%', salesVolume:14100, rating:'4.4', keywords:['캠핑랜턴','LED랜턴','감성캠핑'], reason:'여름 캠핑 시즌. 감성 캠핑 조명으로 직구·재판매 동시 증가' },
+      { id:'cn10w', name:'여성 여름 원피스 (쉬폰)', source:'알리', category:'패션/의류', subCategory:'원피스 > 여름', cat:'fashion', emoji:'👗', trend:'up', change:'+112%', price:11000, priceText:'11,000원', originalPrice:28000, discount:'61%', salesVolume:13700, rating:'4.0', keywords:['여름원피스','쉬폰원피스','휴가룩'], reason:'바캉스 시즌 패션. 쇼핑몰 리셀러 사입으로 판매량 주간 급증' },
+    ],
+    monthly: [
+      { id:'cn1m', name:'스탠드형 에어서큘레이터', source:'알리', category:'디지털/가전', subCategory:'계절가전 > 서큘레이터', cat:'digital', emoji:'🌀', trend:'up', change:'+310%', price:24000, priceText:'24,000원', originalPrice:52000, discount:'54%', salesVolume:18900, rating:'4.3', keywords:['에어서큘레이터','서큘레이터','여름가전'], reason:'에어컨 시즌 월간 베스트. 국내 브랜드 절반가로 직구 폭증' },
+      { id:'cn2m', name:'대용량 아이스박스 (캠핑)', source:'테무', category:'스포츠/레저', subCategory:'캠핑 > 쿨러', cat:'home', emoji:'🧳', trend:'up', change:'+187%', price:18000, priceText:'18,000원', originalPrice:45000, discount:'60%', salesVolume:9200, rating:'4.4', keywords:['아이스박스','캠핑쿨러','여름캠핑'], reason:'여름 캠핑·물놀이 필수. 대형 쿨러 직구 마진 높아 재판매 인기' },
+      { id:'cn3m', name:'무선 핸디 청소기', source:'알리', category:'디지털/가전', subCategory:'생활가전 > 청소기', cat:'digital', emoji:'🧹', trend:'up', change:'+145%', price:21000, priceText:'21,000원', originalPrice:48000, discount:'56%', salesVolume:22400, rating:'4.5', keywords:['핸디청소기','무선청소기','차량용청소기'], reason:'차량·가정용 인기. 국내 유사 제품 대비 초저가로 월간 직구 베스트' },
+      { id:'cn4m', name:'유아 물놀이 풀장 (대형)', source:'테무', category:'유아동', subCategory:'유아 > 물놀이', cat:'kids', emoji:'🏊', trend:'up', change:'+265%', price:13000, priceText:'13,000원', originalPrice:32000, discount:'59%', salesVolume:11800, rating:'4.3', keywords:['유아풀장','물놀이풀','베이비풀'], reason:'여름방학 물놀이 시즌. 대형 풀장 맘카페 공동구매 폭증' },
+      { id:'cn5m', name:'여름 쿨링 차량 시트커버', source:'알리', category:'디지털/가전', subCategory:'차량용품 > 시트', cat:'home', emoji:'🚗', trend:'up', change:'+123%', price:8500, priceText:'8,500원', originalPrice:21000, discount:'60%', salesVolume:14600, rating:'4.2', keywords:['차량시트커버','쿨시트','여름차량용품'], reason:'폭염 차량 관리 수요. 통풍 시트로 월간 직구 인기 상승' },
+      { id:'cn6m', name:'접이식 미니 트램펄린', source:'테무', category:'스포츠/레저', subCategory:'홈트 > 운동기구', cat:'home', emoji:'🤸', trend:'new', change:'NEW', price:26000, priceText:'26,000원', originalPrice:58000, discount:'55%', salesVolume:7300, rating:'4.4', keywords:['트램펄린','홈트','유아운동'], reason:'홈트·유아 운동 신규 인기. 실내 운동 트렌드로 직구 급상승' },
+      { id:'cn7m', name:'대용량 보조배터리 (고속충전)', source:'알리', category:'디지털/가전', subCategory:'IT액세서리 > 충전', cat:'digital', emoji:'🔋', trend:'up', change:'+89%', price:14000, priceText:'14,000원', originalPrice:32000, discount:'56%', salesVolume:35200, rating:'4.5', keywords:['보조배터리','고속충전','대용량배터리'], reason:'여행·야외활동 필수. 고용량 초저가로 월간 직구 스테디셀러' },
+      { id:'cn8m', name:'반려동물 자동 급수기', source:'테무', category:'반려동물', subCategory:'반려동물 > 급수', cat:'pet', emoji:'🐱', trend:'up', change:'+167%', price:11500, priceText:'11,500원', originalPrice:28000, discount:'59%', salesVolume:10400, rating:'4.4', keywords:['자동급수기','펫급수기','반려동물용품'], reason:'펫케어 직구 인기. 여름 수분 공급 수요로 월간 판매 급증' },
+      { id:'cn9m', name:'여름 쿨토시 (UV차단)', source:'알리', category:'패션/의류', subCategory:'잡화 > 토시', cat:'fashion', emoji:'💪', trend:'up', change:'+134%', price:1900, priceText:'1,900원', originalPrice:4900, discount:'61%', salesVolume:28700, rating:'4.3', keywords:['쿨토시','자외선차단토시','팔토시'], reason:'야외활동·운전 자외선 차단. 초저가 대량 사입 문의 월간 급증' },
+      { id:'cn10m', name:'무선 선풍기 (스탠드 겸용)', source:'알리', category:'디지털/가전', subCategory:'계절가전 > 선풍기', cat:'digital', emoji:'🌬️', trend:'up', change:'+98%', price:16000, priceText:'16,000원', originalPrice:38000, discount:'58%', salesVolume:19200, rating:'4.4', keywords:['무선선풍기','충전선풍기','스탠드선풍기'], reason:'여름 가전 직구 베스트. 무선·스탠드 겸용으로 재판매 마진 높음' },
+    ],
+    yearly: [
+      { id:'cn1y', name:'스마트워치 (가성비)', source:'알리', category:'디지털/가전', subCategory:'웨어러블 > 스마트워치', cat:'digital', emoji:'⌚', trend:'up', change:'+420%', price:18000, priceText:'18,000원', originalPrice:45000, discount:'60%', salesVolume:128000, rating:'4.3', keywords:['스마트워치','가성비워치','웨어러블'], reason:'연간 알리 전자 1위. 애플워치 1/10 가격으로 직구·재판매 폭발적 성장' },
+      { id:'cn2y', name:'무선 이어폰 (노이즈캔슬링)', source:'알리', category:'디지털/가전', subCategory:'음향 > 이어폰', cat:'digital', emoji:'🎧', trend:'up', change:'+356%', price:12000, priceText:'12,000원', originalPrice:29000, discount:'59%', salesVolume:215000, rating:'4.4', keywords:['노이즈캔슬링','무선이어폰','TWS'], reason:'연간 메가 베스트셀러. 저가 노캔 이어폰 한국 재판매 시장 형성' },
+      { id:'cn3y', name:'미니 가전 세트 (1인가구)', source:'테무', category:'디지털/가전', subCategory:'생활가전 > 미니가전', cat:'digital', emoji:'🏠', trend:'up', change:'+245%', price:35000, priceText:'35,000원', originalPrice:78000, discount:'55%', salesVolume:42000, rating:'4.2', keywords:['미니가전','1인가구','자취템'], reason:'1인 가구 증가로 연간 성장. 자취 필수 가전 직구 트렌드 정착' },
+      { id:'cn4y', name:'홈트레이닝 기구 세트', source:'알리', category:'스포츠/레저', subCategory:'홈트 > 운동기구', cat:'home', emoji:'🏋️', trend:'up', change:'+198%', price:22000, priceText:'22,000원', originalPrice:52000, discount:'58%', salesVolume:67000, rating:'4.3', keywords:['홈트기구','운동기구','홈짐'], reason:'홈트 문화 정착으로 연간 꾸준. 국내가 절반 수준 직구 인기' },
+      { id:'cn5y', name:'주방 정리 수납용품 세트', source:'알리', category:'홈/리빙', subCategory:'수납 > 주방정리', cat:'home', emoji:'🗄️', trend:'up', change:'+167%', price:9900, priceText:'9,900원', originalPrice:24000, discount:'59%', salesVolume:89000, rating:'4.5', keywords:['주방정리','수납용품','정리템'], reason:'정리정돈 트렌드 연중 지속. 다이소 대비 저가로 직구·재판매 활발' },
+      { id:'cn6y', name:'반려동물 자동 급식기', source:'테무', category:'반려동물', subCategory:'반려동물 > 급식', cat:'pet', emoji:'🐾', trend:'up', change:'+212%', price:24000, priceText:'24,000원', originalPrice:55000, discount:'56%', salesVolume:31000, rating:'4.3', keywords:['자동급식기','펫급식기','반려동물IoT'], reason:'펫 IoT 직구 성장. 1인 가구 반려동물 케어 수요로 연간 급상승' },
+      { id:'cn7y', name:'유아 교육 완구 세트', source:'알리', category:'유아동', subCategory:'완구 > 교육완구', cat:'kids', emoji:'🧩', trend:'up', change:'+145%', price:13000, priceText:'13,000원', originalPrice:32000, discount:'59%', salesVolume:54000, rating:'4.4', keywords:['교육완구','유아장난감','몬테소리'], reason:'프리미엄 육아 + 가성비 직구. 몬테소리풍 완구 맘카페 공동구매 연중 활발' },
+      { id:'cn8y', name:'미니 메이크업 브러시 세트', source:'테무', category:'뷰티/화장품', subCategory:'메이크업 > 도구', cat:'beauty', emoji:'🖌️', trend:'up', change:'+178%', price:4500, priceText:'4,500원', originalPrice:12000, discount:'63%', salesVolume:96000, rating:'4.3', keywords:['메이크업브러시','화장도구','뷰티템'], reason:'뷰티 도구 초저가 직구 베스트. 브랜드 대비 1/5 가격으로 재판매 인기' },
+      { id:'cn9y', name:'LED 스트링 조명 (인테리어)', source:'알리', category:'홈/리빙', subCategory:'조명 > 장식조명', cat:'home', emoji:'✨', trend:'up', change:'+156%', price:3500, priceText:'3,500원', originalPrice:9000, discount:'61%', salesVolume:142000, rating:'4.5', keywords:['스트링조명','LED장식','감성조명'], reason:'감성 인테리어 트렌드로 연간 메가 히트. 초저가 인테리어 소품 직구 1위급' },
+      { id:'cn10y', name:'접이식 수납 박스 (대형)', source:'알리', category:'홈/리빙', subCategory:'수납 > 정리박스', cat:'home', emoji:'📦', trend:'up', change:'+123%', price:5900, priceText:'5,900원', originalPrice:14000, discount:'58%', salesVolume:78000, rating:'4.4', keywords:['수납박스','정리박스','접이식수납'], reason:'미니멀·정리 트렌드 연중 지속. 대형 접이식 박스 직구·재판매 꾸준' },
+    ]
+  }
+};
+
+const KEYWORDS = {
+  daily: [
+    { text:'장마', size:4 }, { text:'제습', size:3 }, { text:'냉감', size:4 }, { text:'선크림', size:3 },
+    { text:'오트밀', size:2 }, { text:'수박', size:3 }, { text:'아이스', size:4 }, { text:'캠핑', size:3 },
+    { text:'다이어트', size:2 }, { text:'원피스', size:3 }, { text:'물놀이', size:4 }, { text:'냉면', size:2 },
+    { text:'모기', size:1 }, { text:'제로칼로리', size:2 }, { text:'갓생', size:3 }
+  ],
+  weekly: [
+    { text:'여름휴가', size:4 }, { text:'수영복', size:4 }, { text:'바베큐', size:3 }, { text:'선케어', size:3 },
+    { text:'홈파티', size:3 }, { text:'린넨', size:2 }, { text:'탈색', size:2 }, { text:'러닝', size:3 },
+    { text:'캠핑', size:4 }, { text:'냉장고정리', size:2 }, { text:'키토', size:1 }, { text:'미니멀', size:2 }
+  ],
+  monthly: [
+    { text:'에어컨', size:4 }, { text:'여름여행', size:4 }, { text:'바캉스', size:3 }, { text:'자외선차단', size:4 },
+    { text:'홈트', size:3 }, { text:'건강식', size:3 }, { text:'반려동물', size:2 }, { text:'인테리어', size:3 },
+    { text:'이유식', size:2 }, { text:'발각질', size:1 }, { text:'여름이불', size:2 }, { text:'헬스', size:3 }
+  ],
+  yearly: [
+    { text:'제로웨이스트', size:4 }, { text:'오운완', size:4 }, { text:'홈카페', size:4 }, { text:'퍼스널컬러', size:3 },
+    { text:'AI', size:4 }, { text:'제로슈거', size:3 }, { text:'친환경', size:3 }, { text:'펫프리미엄', size:2 },
+    { text:'스몰럭셔리', size:3 }, { text:'갓생', size:4 }, { text:'재테크', size:2 }, { text:'미니멀', size:3 }
+  ]
+};
+
+// ===== STATE =====
+let currentPeriod = 'daily';
+let currentPlatform = 'all';
+let currentCategory = 'all';
+let selectedItems = {};
+let naverLiveData = null;
+let naverProducts = null;
+let aliLiveData = null;
+let isNaverConfigured = false;
+let isSheetsConfigured = false;
+let isAliConfigured = false;
+let isCoupangConfigured = false;
+let coupangLiveData = null;
+let instaLiveData = null;
+let isTaobaoConfigured = false;
+let taobaoLiveData = null;
+let opportunityData = null;  // 기회점수 (카테고리 단위)
+
+// 네이버 카테고리명 → 경쟁도 측정용 검색어
+const OPP_KW = {
+  '식품':'간편식', '화장품/미용':'화장품', '패션의류':'여성의류', '가구/인테리어':'인테리어소품',
+  '출산/육아':'유아용품', '스포츠/레저':'스포츠용품', '디지털/가전':'가전'
+};
+
+// 기회점수 계산: 성장률 40% + 시장규모 25% + (낮은)경쟁도 35%
+//  ※ 평점·리뷰 신호는 리뷰 데이터 확보(Phase 2) 후 추가
+async function loadOpportunity() {
+  if (!isNaverConfigured || !naverLiveData || naverLiveData.length === 0) return;
+  try {
+    const cats = naverLiveData;
+    // 경쟁도: 카테고리 대표어의 네이버 검색 결과 수 (적을수록 진입 유리)
+    const totals = await Promise.all(cats.map(c =>
+      afetch(`/api/naver/search?q=${encodeURIComponent(OPP_KW[c.name] || c.name)}&display=1`)
+        .then(r => r.json()).then(j => j.total || 0).catch(() => 0)
+    ));
+    // 경쟁도 순위 정규화 (총량 스케일이 제각각이라 랭크 기반)
+    const ranked = cats.map((c, i) => ({ i, total: totals[i] })).sort((a, b) => a.total - b.total);
+    const compByIdx = {};
+    ranked.forEach((o, rank) => { compByIdx[o.i] = cats.length > 1 ? Math.round((1 - rank / (cats.length - 1)) * 100) : 100; });
+
+    opportunityData = cats.map((c, i) => {
+      const growth = Math.max(0, Math.min(100, Math.round(50 + (c.change || 0) * 4))); // +10% → 90
+      const size = Math.round(parseFloat(c.ratio));                                     // 0~100
+      const comp = compByIdx[i];                                                         // 낮은 경쟁 → 높은 점수
+      const score = Math.round(0.40 * growth + 0.25 * size + 0.35 * comp);
+      return { name: c.name, change: c.change, ratio: c.ratio, total: totals[i], growth, size, comp, score };
+    }).sort((a, b) => b.score - a.score);
+    render();
+  } catch (e) { /* 조용히 무시 */ }
+}
+
+// ===== 환경 설정: 로컬(Express) vs 배포(Supabase) =====
+const CFG = window.GAMJA_CONFIG || {};
+const cfgValid = (v) => v && !String(v).startsWith('여기에');
+const SUPA_OK = cfgValid(CFG.SUPABASE_URL) && cfgValid(CFG.SUPABASE_ANON_KEY);
+// API 베이스: Supabase 설정 시 Edge Function, 아니면 로컬 Express(/api)
+const EDGE_FN = CFG.EDGE_FUNCTION || 'market-api';
+const API_BASE = SUPA_OK ? `${CFG.SUPABASE_URL}/functions/v1/${EDGE_FN}` : '';
+const api = (path) => API_BASE + path;
+// Edge Function 호출 시 익명 키 인증 헤더 자동 첨부
+function afetch(path, opts = {}) {
+  const headers = { ...(opts.headers || {}) };
+  if (SUPA_OK) { headers['apikey'] = CFG.SUPABASE_ANON_KEY; headers['Authorization'] = `Bearer ${CFG.SUPABASE_ANON_KEY}`; }
+  return fetch(api(path), { ...opts, headers });
+}
+// Supabase 클라이언트 (선별목록 DB 동기화용)
+const sb = (SUPA_OK && window.supabase) ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+const DEVICE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) ? '📱 모바일' : '💻 PC';
+
+// ===== INIT =====
+document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('currentDate').textContent = new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+  await checkStatus();
+  await loadSelectionsFromDB();
+  render();
+  loadBriefing();   // 🌅 오늘의 아침 브리핑 (일간 전체 요약)
+  if (isNaverConfigured) loadNaverData(currentPeriod, null);
+  if (currentPlatform === 'china') { if (isTaobaoConfigured) loadTaobaoData(null); else if (isAliConfigured) loadAliData(null); }
+});
+
+// ===== 🌅 오늘의 아침 브리핑 (일간 트렌드 전체 요약) =====
+let briefingCats = null, briefingProds = null;
+
+async function loadBriefing(force) {
+  const el = document.getElementById('briefing');
+  if (!isNaverConfigured) { el.className = 'briefing hidden'; return; }
+  el.className = 'briefing';
+  el.innerHTML = `<div class="brief-loading"><span class="spin">↻</span> 오늘의 트렌드를 모으는 중...</div>`;
+  try {
+    // 일간 카테고리 트렌드 + 대표 상품 (메인 선택과 독립적으로 항상 '일간 전체')
+    const [catRes, prodRes] = await Promise.all([
+      afetch('/api/naver/categories?period=daily').then(r => r.json()),
+      afetch('/api/naver/products').then(r => r.json()),
+    ]);
+    if (catRes.success) briefingCats = catRes.data;
+    if (prodRes.success) briefingProds = prodRes.data;
+    renderBriefing();
+  } catch (e) {
+    el.innerHTML = `<div class="brief-loading">브리핑을 불러오지 못했습니다. <a href="#" onclick="loadBriefing(true);return false" style="color:var(--primary)">다시 시도</a></div>`;
+  }
+}
+
+function renderBriefing() {
+  const el = document.getElementById('briefing');
+  if (!briefingCats || briefingCats.length === 0) { el.className = 'briefing hidden'; return; }
+
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 11 ? '좋은 아침입니다' : hour < 18 ? '안녕하세요' : '오늘도 수고하셨습니다';
+  const dateStr = now.toLocaleDateString('ko-KR', { month:'long', day:'numeric', weekday:'long' });
+  const timeStr = now.toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
+
+  // 급상승 카테고리 (변화율 순)
+  const rising = [...briefingCats].sort((a,b) => (b.change||0) - (a.change||0));
+  const top = rising[0];
+  const risingUp = rising.filter(c => c.trend === 'up');
+
+  // 키워드 (상품명 기반)
+  let kws = [];
+  if (briefingProds) {
+    const freq = {};
+    briefingProds.forEach(g => { if (g.searchKeyword) freq[g.searchKeyword] = (freq[g.searchKeyword]||0)+5;
+      g.items.forEach(it => { if (it.brand) freq[it.brand] = (freq[it.brand]||0)+1; }); });
+    kws = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,7).map(e=>e[0]);
+  }
+
+  // 주목 상품 (각 그룹 1위)
+  let prods = [];
+  if (briefingProds) briefingProds.forEach(g => { if (g.items[0]) prods.push({ ...g.items[0], cat: g.category }); });
+  prods = prods.slice(0, 4);
+
+  // 헤드라인 자동 생성
+  let headline = `오늘은 <span class="hl">${top.name}</span> 분야가 가장 활발합니다`;
+  if (risingUp.length >= 2) headline += ` · <span class="hl">${risingUp.slice(0,3).map(c=>c.name).join(', ')}</span> 상승세`;
+  headline += '.';
+
+  const fmtChange = (c) => c.trend === 'up' ? `▲ +${c.change}%` : c.trend === 'down' ? `▼ ${c.change}%` : '=';
+
+  el.className = 'briefing';
+  el.innerHTML = `
+    <div class="brief-head">
+      <div>
+        <div class="b-title">🌅 오늘의 트렌드 브리핑</div>
+        <div class="b-date">${greeting}, 감자마켓 MD님 · ${dateStr}</div>
+      </div>
+      <button class="brief-refresh" onclick="loadBriefing(true)">↻ ${timeStr} 기준</button>
+    </div>
+    <div class="brief-body">
+      <div class="brief-headline">📌 ${headline}</div>
+      <div class="brief-grid">
+        <div class="brief-col">
+          <div class="b-col-title">🔥 급상승 카테고리</div>
+          ${rising.slice(0,5).map((c,i) => `
+            <div class="brief-rank">
+              <div class="r-num ${i===0?'top':''}">${i+1}</div>
+              <div class="r-name">${c.name}</div>
+              <div class="r-val ${c.trend==='up'?'up':'same'}">${fmtChange(c)}</div>
+            </div>`).join('')}
+        </div>
+        <div class="brief-col">
+          <div class="b-col-title">🔑 핫 키워드</div>
+          ${kws.length ? `<div class="brief-kw">${kws.map(k=>`<span class="kw" onclick="searchKeyword('${k}')">#${k}</span>`).join('')}</div>`
+            : `<div style="font-size:12px;color:var(--sub)">상품 로딩 중...</div>`}
+        </div>
+        <div class="brief-col">
+          <div class="b-col-title">🛒 주목 상품</div>
+          ${prods.length ? prods.map(p => `
+            <div class="brief-prod" onclick="window.open('${p.link}','_blank')">
+              ${p.image ? `<img src="${p.image}" />` : '<div class="brief-prod-noimg">🛒</div>'}
+              <div class="p-info">
+                <div class="p-name">${p.name}</div>
+                <div class="p-meta">${p.category} · ${p.priceText}</div>
+              </div>
+            </div>`).join('')
+            : `<div style="font-size:12px;color:var(--sub)">상품 로딩 중...</div>`}
+        </div>
+      </div>
+    </div>`;
+}
+
+// ===== Supabase 선별목록 동기화 =====
+async function loadSelectionsFromDB() {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from('selections').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    selectedItems = {};
+    (data || []).forEach(row => {
+      selectedItems[row.item_id] = row.payload || {
+        id: row.item_id, name: row.name, platform: row.platform, category: row.category,
+        subCategory: row.sub_category, change: row.trend, score: row.score, note: row.note,
+        image: row.image, link: row.link
+      };
+    });
+    const cnt = Object.keys(selectedItems).length;
+    document.getElementById('selectedCountBadge').textContent = cnt;
+    document.getElementById('summarySelected').textContent = cnt;
+  } catch (e) { console.warn('선별목록 불러오기 실패:', e.message); }
+}
+
+async function dbUpsertSelection(id, item) {
+  if (!sb) return;
+  try {
+    await sb.from('selections').upsert({
+      item_id: id, name: item.name, platform: item.platform, category: item.category,
+      sub_category: item.subCategory || '', price_text: item.priceRange || item.change || '',
+      trend: item.change || '', score: item.score || '', note: item.note || '',
+      md_note: window._savedNote || '', image: item.image || '', link: item.link || '',
+      payload: item, device_label: DEVICE
+    }, { onConflict: 'item_id' });
+  } catch (e) { console.warn('DB 저장 실패:', e.message); }
+}
+
+async function dbDeleteSelection(id) {
+  if (!sb) return;
+  try { await sb.from('selections').delete().eq('item_id', id); }
+  catch (e) { console.warn('DB 삭제 실패:', e.message); }
+}
+
+async function checkStatus() {
+  try {
+    const res = await afetch('/api/status');
+    const data = await res.json();
+    isNaverConfigured = data.naverConfigured;
+    isSheetsConfigured = data.sheetsConfigured;
+    isAliConfigured = data.aliConfigured;
+    isCoupangConfigured = data.coupangConfigured;
+    isTaobaoConfigured = data.taobaoConfigured;
+
+    document.getElementById('apiStatusBadge').textContent = isNaverConfigured ? '🟢 네이버 연동' : '⚙️ 설정 필요';
+    document.getElementById('apiStatusBadge').className = `api-status ${isNaverConfigured ? 'ok' : 'warn'}`;
+    document.getElementById('alertBanner').className = `alert-banner ${isNaverConfigured ? 'hidden' : ''}`;
+    document.getElementById('sheetsBtn').disabled = !isSheetsConfigured;
+    document.getElementById('sheetsBtn').title = isSheetsConfigured ? '' : 'Google Sheets 미설정';
+
+    if (data.lastFetch) {
+      document.getElementById('lastFetchTime').textContent = `마지막 수집: ${new Date(data.lastFetch).toLocaleTimeString('ko-KR')}`;
+    }
+    if (isNaverConfigured) showToast('네이버 API 연결됨 🟢');
+  } catch (e) {
+    // server not running — static mode
+  }
+}
+
+async function loadNaverData(period, btn) {
+  if (!isNaverConfigured) { showToast('네이버 API 키를 먼저 설정해주세요'); openSetupModal(); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    // 1) 카테고리 트렌드 지수
+    const res = await afetch(`/api/naver/categories?period=${period}`);
+    const json = await res.json();
+    if (json.success) {
+      naverLiveData = json.data;
+      document.getElementById('dataSourceBadge').textContent = '실시간 데이터';
+      document.getElementById('dataSourceBadge').className = 'live-badge';
+      document.getElementById('lastFetchTime').textContent = `수집: ${new Date(json.fetchedAt).toLocaleTimeString('ko-KR')}`;
+      loadOpportunity(); // 기회점수 계산 (비동기, 끝나면 자체 render)
+    }
+    render();
+    // 2) 실제 상품 — 카테고리 선택 시 해당 분야 TOP 20, 전체면 상위 카테고리별
+    const catMap = { food:'식품', beauty:'화장품/미용', fashion:'패션의류', home:'가구/인테리어', kids:'출산/육아', pet:'반려동물', digital:'디지털/가전' };
+    let url = '/api/naver/products';
+    if (currentCategory !== 'all' && catMap[currentCategory]) {
+      url += `?category=${encodeURIComponent(catMap[currentCategory])}&perKeyword=5`;
+    }
+    const pr = await afetch(url);
+    const pj = await pr.json();
+    if (pj.success) {
+      naverProducts = pj.data;
+      const cnt = pj.data.reduce((s,g)=>s+g.items.length,0);
+      showToast(`네이버 실시간 트렌드 + 상품 ${cnt}개 업데이트 ✓`);
+    }
+  } catch (e) {
+    showToast('데이터 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 네이버 카테고리 막대 클릭 → 그 카테고리 실제 상품 TOP 20
+async function loadCategoryProducts(catName) {
+  if (!isNaverConfigured) { showToast('네이버 API 미연결'); return; }
+  showToast(`"${catName}" 상품 TOP 20 조회중...`);
+  try {
+    const r = await afetch(`/api/naver/products?category=${encodeURIComponent(catName)}&perKeyword=5`);
+    const j = await r.json();
+    if (j.success) {
+      naverProducts = j.data;
+      // 필터를 전체로 맞춰 클릭한 카테고리 상품이 모두 보이게
+      currentCategory = 'all';
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      const allBtn = document.querySelector('.cat-btn'); if (allBtn) allBtn.classList.add('active');
+      const cnt = j.data.reduce((s,g)=>s+g.items.length,0);
+      render();
+      showToast(`"${catName}" TOP ${cnt} 상품 표시 ✓`);
+    } else {
+      showToast('조회 실패: ' + (j.message||j.error));
+    }
+  } catch (e) { showToast('조회 실패: ' + e.message); }
+}
+
+// ===== CONTROLS =====
+function setPeriod(p, btn) {
+  currentPeriod = p;
+  naverLiveData = null;
+  naverProducts = null;
+  aliLiveData = null;
+  opportunityData = null;
+  document.getElementById('dataSourceBadge').textContent = '목업 데이터';
+  document.getElementById('dataSourceBadge').className = 'mock-badge';
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+  if (isNaverConfigured) loadNaverData(p, null);
+  if (isAliConfigured && (currentPlatform === 'china' || currentPlatform === 'all')) loadAliData(null);
+}
+function setPlatform(p, btn) {
+  currentPlatform = p;
+  document.querySelectorAll('.platform-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+  if (p === 'china' || p === 'all') {
+    if (isTaobaoConfigured && !taobaoLiveData) loadTaobaoData(null);
+    else if (isAliConfigured && !aliLiveData) loadAliData(null);
+  }
+  if (p === 'coupang' && isCoupangConfigured && !coupangLiveData) loadCoupangData(null);
+  if (p === 'instagram' && isNaverConfigured && !instaLiveData) loadInstaData(null);
+}
+function setCategory(c, btn) {
+  currentCategory = c;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+  // 카테고리 바뀌면 실제 상품 재조회
+  if (isNaverConfigured) loadNaverData(currentPeriod, null);
+  if (currentPlatform === 'china' || currentPlatform === 'all') {
+    if (isTaobaoConfigured) { taobaoLiveData = null; loadTaobaoData(null); }
+    else if (isAliConfigured) loadAliData(null);
+  }
+  if (isCoupangConfigured && currentPlatform === 'coupang') { coupangLiveData = null; loadCoupangData(null); }
+  if (isNaverConfigured && currentPlatform === 'instagram') { instaLiveData = null; loadInstaData(null); }
+}
+
+// 네이버 실제 상품명에서 인기 키워드 추출
+const KW_STOP = new Set(['세트','정품','무료배송','당일발송','국내산','신상','공식','단품','대용량','세일','특가','사은품','선물','구성','본품','리뉴얼','정품인증','당일출고','로켓','택배','개입','매','팩','박스','for','the','and','with','new','pro','set']);
+function extractNaverKeywords() {
+  if (!naverProducts || naverProducts.length === 0) return null;
+  const freq = {};
+  const bump = (w, n) => { if (!w) return; w = w.trim(); if (w.length < 2 || KW_STOP.has(w.toLowerCase())) return; if (/^\d+(ml|g|kg|cm|mm|개|매|p|호|매입)?$/i.test(w)) return; freq[w] = (freq[w]||0) + n; };
+  naverProducts.forEach(g => {
+    bump(g.searchKeyword, 6); // 검색어 가중치 ↑
+    g.items.forEach(it => {
+      if (it.brand) bump(it.brand, 3);
+      String(it.name).split(/[\s,/()\[\]·.+]+/).forEach(tok => {
+        const clean = tok.replace(/[^가-힣a-zA-Z0-9]/g, '');
+        bump(clean, 1);
+      });
+    });
+  });
+  const arr = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0, 24);
+  if (arr.length === 0) return null;
+  const max = arr[0][1];
+  return arr.map(([text, count]) => ({ text, count, size: Math.max(1, Math.ceil(count/max*4)) }));
+}
+
+// 알리익스프레스 실시간 인기 상품 로드
+async function loadAliData(btn) {
+  if (!isAliConfigured) { showToast('알리 App Key를 먼저 설정해주세요 (목업 표시 중)'); openSetupModal(); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    const catMap = { food:'food', beauty:'beauty', fashion:'apparel', home:'home', kids:'baby', pet:'pet', digital:'electronics' };
+    const kwMap = { food:'간식', beauty:'화장품', fashion:'여름옷', home:'주방용품', kids:'유아용품', pet:'반려동물', digital:'가성비가전' };
+    let url = '/api/ali/hotproducts?pageSize=20';
+    if (currentCategory !== 'all' && kwMap[currentCategory]) url += `&keyword=${encodeURIComponent(kwMap[currentCategory])}`;
+    const res = await afetch(url);
+    const json = await res.json();
+    if (json.success) {
+      aliLiveData = json.data;
+      showToast(`알리 실시간 인기 상품 ${json.data.length}개 ✓`);
+    } else {
+      showToast('알리 데이터 수집 실패: ' + (json.message||json.error));
+    }
+  } catch (e) {
+    showToast('알리 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 타오바오 인기 상품 (타오바오커, 60분 캐싱)
+async function loadTaobaoData(btn) {
+  if (!isTaobaoConfigured) { showToast('타오바오 키를 먼저 설정해주세요'); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    const cat = currentCategory !== 'all' ? `?category=${currentCategory}` : '';
+    const res = await afetch('/api/taobao/hot' + cat);
+    const json = await res.json();
+    if (json.success) {
+      taobaoLiveData = json.data;
+      const note = json.cached ? `(${json.ageMin}분 전 캐시)` : '(실시간)';
+      showToast(`타오바오 인기상품 ${json.data.length}개 ${note} ✓`);
+    } else {
+      showToast('타오바오 수집 실패: ' + (json.message || json.error));
+    }
+  } catch (e) {
+    showToast('타오바오 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 쿠팡 실시간 인기 상품 (골드박스 또는 카테고리 베스트, 30분 캐싱)
+async function loadCoupangData(btn) {
+  if (!isCoupangConfigured) { showToast('쿠팡 키를 먼저 설정해주세요 (목업 표시 중)'); openSetupModal(); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    // 카테고리 선택 시 베스트카테고리, 전체면 골드박스
+    const url = currentCategory !== 'all'
+      ? `/api/coupang/best?category=${currentCategory}&limit=20`
+      : '/api/coupang/goldbox';
+    const res = await afetch(url);
+    const json = await res.json();
+    if (json.success) {
+      coupangLiveData = json.data;
+      const src = currentCategory !== 'all' ? `${json.category} 베스트` : '골드박스';
+      const note = json.cached ? `(${json.ageMin}분 전 캐시)` : '(실시간)';
+      showToast(`쿠팡 ${src} ${json.data.length}개 ${note} ✓`);
+    } else {
+      showToast('쿠팡 수집 실패: ' + (json.message || json.error));
+    }
+  } catch (e) {
+    showToast('쿠팡 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 인스타 트렌드 (해시태그 → 네이버 인기도/상품, 60분 캐싱)
+async function loadInstaData(btn) {
+  if (!isNaverConfigured) { showToast('네이버 연결 필요 (인스타는 네이버 데이터 기반)'); return; }
+  if (btn) { btn.classList.add('loading'); btn.innerHTML = '<span class="spin">↻</span> 수집 중...'; }
+  try {
+    const cat = currentCategory !== 'all' ? `?category=${currentCategory}` : '';
+    const res = await afetch('/api/insta/trends' + cat);
+    const json = await res.json();
+    if (json.success) {
+      instaLiveData = json.data;
+      const note = json.cached ? `(${json.ageMin}분 전 캐시)` : '(실시간)';
+      showToast(`인스타 트렌드 ${json.data.length}개 ${note} ✓`);
+    } else {
+      showToast('인스타 수집 실패: ' + (json.message || json.error));
+    }
+  } catch (e) {
+    showToast('인스타 수집 실패: ' + e.message);
+  } finally {
+    if (btn) { btn.classList.remove('loading'); btn.innerHTML = '↻ 새로고침'; }
+  }
+  render();
+}
+
+// 키워드 클릭 → 실제 상품 검색 결과를 네이버 패널 상단에 표시
+async function searchKeyword(kw) {
+  if (!isNaverConfigured) { showToast(`"${kw}" 키워드 (네이버 미연결)`); return; }
+  showToast(`"${kw}" 상품 검색 중...`);
+  try {
+    const r = await afetch(`/api/naver/search?q=${encodeURIComponent(kw)}&display=12`);
+    const j = await r.json();
+    if (j.success) {
+      const grp = { category: `🔍 "${kw}" 검색`, searchKeyword: kw, isSearch: true,
+        items: j.data.map(it => ({ ...it, category: `🔍 "${kw}" 검색` })) };
+      naverProducts = [grp, ...(naverProducts || []).filter(g => !g.isSearch)];
+      // 네이버 탭으로 자동 전환
+      if (currentPlatform !== 'naver' && currentPlatform !== 'all') {
+        currentPlatform = 'naver';
+        document.querySelectorAll('.platform-tab').forEach(b => b.classList.toggle('active', b.dataset.platform === 'naver'));
+      }
+      render();
+      showToast(`"${kw}" 검색 결과 ${j.data.length}개 (총 ${j.total?.toLocaleString()||'?'}건)`);
+    }
+  } catch (e) { showToast('검색 실패: ' + e.message); }
+}
+
+function getFilteredItems(items) {
+  if (currentCategory === 'all') return items;
+  return items.filter(i => i.cat === currentCategory);
+}
+
+// ===== RENDER (PDT 3분할) =====
+// 기존 데이터 레이어는 그대로 두고, 화면만 좌/중/우/하단으로 재배치한다.
+let focusName = null; // 현재 분석 중인 분야(네이버 카테고리명 기준)
+const PDT_CATKEY = { '식품':'food', '화장품/미용':'beauty', '패션의류':'fashion', '가구/인테리어':'home', '출산/육아':'kids', '스포츠/레저':'pet', '디지털/가전':'digital' };
+
+function oppTier(s) { return s >= 75 ? { c:'#0F9D58', bg:'#E7F6EE', t:'추천' } : s >= 60 ? { c:'#D97706', bg:'#FEF3C7', t:'관심' } : { c:'#6B7280', bg:'#F3F4F6', t:'보류' }; }
+function oppCompLabel(c) { return c >= 67 ? '낮음(유리)' : c >= 34 ? '중간' : '높음'; }
+function oppSignalText(o) {
+  const g = o.growth >= 70, lc = o.comp >= 67, big = o.size >= 60;
+  if (g && lc) return '성장 강함 · 경쟁 낮음 → 진입 유리';
+  if (g && !lc) return '성장 강하나 경쟁 치열 → 차별화 필요';
+  if (!g && lc && big) return '시장 크고 경쟁 낮음 → 안정적 기회';
+  if (!g && !lc) return '성숙·경쟁 시장 → 신중 검토';
+  return '추가 신호 확인 필요';
+}
+// 현재 포커스된 분야의 기회점수 객체 (없으면 1순위, 그것도 없으면 데모)
+function pdtFocusObj() {
+  if (opportunityData && opportunityData.length) {
+    if (focusName) { const f = opportunityData.find(o => o.name === focusName); if (f) return f; }
+    return opportunityData[0];
+  }
+  // API 미연결 시: 선택 상품 기준 데모 기회객체(사진처럼 채워 보이게 · demo:true로 라벨)
+  const name = focusProduct || MOCK_PRODUCTS.items[0];
+  const m = demoMetrics(name);
+  return { name, score: m.score, growth: 40 + (hashStr(name) % 50), change: m.growth,
+           size: 45 + (hashStr(name) % 45), comp: 30 + (hashStr(name) % 60), demo: true };
+}
+
+// 헤더 검색
+function doSearch() {
+  const el = document.getElementById('pdtSearch');
+  const v = (el?.value || '').trim();
+  if (v) searchKeyword(v);
+}
+
+// 좌측 종목 클릭 → 해당 분야 포커스 + 실제 상품 로드 (기존 oppDrill 재사용)
+function pdtSelect(name) {
+  focusName = name;
+  const key = PDT_CATKEY[name];
+  if (key && isNaverConfigured) oppDrill(key);   // 카테고리 설정 + 네이버 상품 로드 + render
+  else render();
+}
+
+// 메인 렌더: 좌/중/우/하단을 각각 채운다
+function render() {
+  const periodLabel = { daily:'일간', weekly:'주간', monthly:'월간', yearly:'연간' }[currentPeriod];
+  renderCenter(periodLabel);
+  renderLeft(periodLabel);
+  renderRight(periodLabel);
+  renderBottom(periodLabel);
+  renderRailRank();
+  renderAction();
+  renderFlywheel();
+  updateSummary();
+}
+
+// ── 좌측 레일: 상품 랭킹(컴팩트 1~6)
+function renderRailRank() {
+  const el = document.getElementById('pdtRailRank'); if (!el) return;
+  let products;
+  if (naverProducts && naverProducts.length) {
+    products = [];
+    naverProducts.forEach(g => g.items.forEach(it => products.push({ name: it.name, cat: g.category })));
+    products = products.slice(0, 12);
+  } else {
+    products = MOCK_PRODUCTS.items.map(n => ({ name: n, cat: 'home' }));
+  }
+  const rows = products.map(p => ({ ...p, m: demoMetrics(p.name) })).sort((a,b)=>b.m.score-a.m.score).slice(0, 6);
+  el.innerHTML = rows.map((r, i) => {
+    const active = focusProduct === r.name || (!focusProduct && i === 0);
+    const safe = r.name.replace(/'/g, "\\'");
+    return `<div class="rr-row ${active?'active':''}" onclick="pdtSelectProduct('${safe}','${r.cat||''}')">
+      <span class="rr-rank">${i+1}</span><span class="rr-name">${r.name}</span><span class="rr-score">${r.m.score}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── ⑤ 액션 컬럼: 다음 액션 버튼
+function renderAction() {
+  const el = document.getElementById('pdtAction'); if (!el) return;
+  const o = pdtFocusObj();
+  const tgt = o ? o.name : (focusProduct || '');
+  el.innerHTML = `<div class="next-actions" style="margin:14px">
+      <div class="na-h">⚡ 다음 액션 <span style="font-size:11px;font-weight:600;color:var(--sub)">· ${tgt}</span></div>
+      <button class="na-btn primary" onclick="planProduct()"><span class="na-ico">📝</span> 상품 기획안 생성</button>
+      <button class="na-btn" onclick="searchSupplier()"><span class="na-ico">🔗</span> 공급처 검색</button>
+      <button class="na-btn" onclick="openDrawer()"><span class="na-ico">🔔</span> 관심상품·알림 설정</button>
+      <button class="na-btn" onclick="openReport()"><span class="na-ico">📥</span> 리포트 다운로드</button>
+    </div>
+    <div class="next-actions" style="margin:0 14px 14px">
+      <div class="na-h">🔄 빠른 이동</div>
+      <button class="na-btn" onclick="openReviewAnalyzer()"><span class="na-ico">📝</span> 리뷰 분석기</button>
+      <button class="na-btn" onclick="document.querySelector('.pdt-bottom').scrollIntoView({behavior:'smooth'})"><span class="na-ico">🔬</span> 리뷰·키워드 보기</button>
+    </div>`;
+}
+
+// ── 하단: MD 상품 발굴 플라이휠 (8단계 Loop)
+const FLYWHEEL_STEPS = [
+  { n:1, label:'키워드 탐색', sub:'트렌드 발굴' },
+  { n:2, label:'시장 기회 발견', sub:'기회점수 우선순위' },
+  { n:3, label:'경쟁 상품 분석', sub:'가격·경쟁도' },
+  { n:4, label:'리뷰·불만 분석', sub:'고객 니즈 파악' },
+  { n:5, label:'차별화 가설', sub:'기획 아이디어' },
+  { n:6, label:'소싱·상품 등록', sub:'공급처·등록' },
+  { n:7, label:'성과 수집', sub:'판매 데이터' },
+  { n:8, label:'예측 점수 보정', sub:'모델 개선' },
+];
+function renderFlywheel() {
+  const el = document.getElementById('pdtFlywheel'); if (!el) return;
+  el.innerHTML = FLYWHEEL_STEPS.map((s, i) => `
+    <div class="fw-step ${i % 2 ? 'alt' : ''}">
+      <div class="fw-node">
+        <div class="fw-num">${s.n}</div>
+        <div class="fw-label">${s.label}</div>
+        <div class="fw-sub">${s.sub}</div>
+      </div>
+      <div class="fw-arrow">${i < FLYWHEEL_STEPS.length - 1 ? '→' : '↺'}</div>
+    </div>`).join('');
+}
+
+// ── 간단 SVG 스파크라인 (선형 추이 차트)
+function sparkline(values, color) {
+  if (!values || values.length < 2) return '';
+  const w = 240, h = 56, pad = 4;
+  const min = Math.min(...values), max = Math.max(...values);
+  const rng = (max - min) || 1;
+  const step = (w - pad * 2) / (values.length - 1);
+  const pts = values.map((v, i) => [pad + i * step, h - pad - ((v - min) / rng) * (h - pad * 2)]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = `M${pts[0][0].toFixed(1)} ${h - pad} ` + pts.map(p => 'L' + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ') + ` L${pts[pts.length-1][0].toFixed(1)} ${h - pad} Z`;
+  const last = pts[pts.length - 1];
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <path d="${area}" fill="${color}" opacity="0.10"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}"/>
+  </svg>`;
+}
+
+// 포커스 분야 기준 6개월 시뮬 추이(실데이터 없을 때 신호 기반 데모). 증가율로 곡선 기울기 생성.
+function focusTrends(o) {
+  const months = 6;
+  const g = o ? (o.change || 10) : 10;            // 증가율(%)
+  const base = o ? Math.max(20, o.size || 50) : 50;
+  const mk = (start, growthPct) => {
+    const arr = []; let v = start;
+    for (let i = 0; i < months; i++) { arr.push(Math.round(v)); v *= (1 + growthPct / 100 + (i === months-1 ? growthPct/200 : 0)); }
+    return arr;
+  };
+  return {
+    search: mk(base * 600, Math.max(6, g)),
+    review: mk(base * 8, Math.max(8, g * 1.2)),
+    sales:  mk(base * 90000, Math.max(7, g)),
+  };
+}
+function fmtK(n){ return n>=100000000?(n/100000000).toFixed(1)+'억':n>=10000?(n/10000).toFixed(1)+'만':n>=1000?(n/1000).toFixed(1)+'천':String(n); }
+
+// ── 좌측 상품 단위: 평점·리뷰는 무료 API에 없어 상품명 해시로 안정적 데모값 생성(P2 리뷰수집 후 실데이터 교체)
+function hashStr(s){ let h=0; for(let i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))|0; } return Math.abs(h); }
+function demoMetrics(name){
+  const h = hashStr(name||'x');
+  return {
+    rating: (3.9 + (h%11)/10).toFixed(1),          // 3.9~4.9
+    reviews: 300 + (h%140)*90,                       // ~300~12,900
+    search: 8000 + (h%60)*900,                       // ~8천~6만
+    growth: ((h%50) - 12),                           // -12 ~ +37
+    score: 55 + (h%40),                              // 55~94
+  };
+}
+// API 미연결 시 사진과 동일한 분위기의 데모 상품 목록(캠핑/아웃도어)
+const MOCK_PRODUCTS = {
+  name:'캠핑/아웃도어',
+  items:['캠핑 선풍기','캠핑 의자','캠핑 테이블','출링 펜턴','캠핑 쿨러','휴대용 선풍기','감성 랜턴'],
+};
+let focusProduct = null;
+function pdtSelectProduct(name, cat){
+  focusProduct = name;
+  if (cat) pdtSelect(cat); else render();
+}
+
+// ── 다음 액션: 상품 기획안 생성(규칙기반 초안 · P3 맛보기) / 공급처 검색
+function planProduct() {
+  const o = pdtFocusObj();
+  if (!o) { showToast('먼저 좌측에서 분야/상품을 선택하세요'); return; }
+  const tr = oppTier(o.score);
+  const price = o.size>=60?'중상가(2~5만원)':o.size>=40?'중가(1~3만원)':'실속가(1만원 내외)';
+  const lines = [
+    `# ${o.name} 상품 기획안 (초안)`,
+    ``,
+    `■ 기회점수: ${o.score}점 (${tr.t}) · 성장 ${(o.change>0?'+':'')+o.change}% · 경쟁 ${oppCompLabel(o.comp)}`,
+    `■ 권장 가격대: ${price}`,
+    `■ 타깃: 해당 분야 관심 고객 (리뷰 수집 후 정밀화)`,
+    `■ 차별화 포인트: 리뷰 불만요인 해소형 (예: 무게/충전/내구성)`,
+    `■ 상품명 후보: "${o.name} 프리미엄", "${o.name} 실속형"`,
+    `■ 다음 단계: 경쟁상품 리뷰 분석 → 불만 TOP3 → 사양 보정`,
+    ``,
+    `※ 규칙기반 자동 초안입니다. AI 정밀 기획안은 키 연결 후(P3) 제공됩니다.`,
+  ];
+  const blob = new Blob([lines.join('\n')], { type:'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob); const a = document.createElement('a');
+  a.href = url; a.download = `기획안_${o.name}_${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  showToast('상품 기획안 초안을 내려받았습니다 📝');
+}
+function searchSupplier() {
+  const o = pdtFocusObj();
+  const q = encodeURIComponent((o ? o.name : (focusName||'')) + ' 도매 공급처');
+  window.open('https://search.naver.com/search.naver?query=' + q, '_blank', 'noopener');
+}
+
+// ── 좌측: 상품 단위 목록 — 실데이터(네이버 상품)>데모 상품. 평점·리뷰는 데모값(P2 후 실데이터)
+function renderLeft(periodLabel) {
+  const el = document.getElementById('pdtLeft'); if (!el) return;
+  // 1) 실제 상품(naverProducts)이 있으면 상품 단위로
+  let catName, products, isLive = false;
+  if (naverProducts && naverProducts.length) {
+    isLive = true;
+    catName = naverProducts[0].category || '실시간 상품';
+    products = [];
+    naverProducts.forEach(g => g.items.forEach(it => products.push({
+      name: it.name, image: it.image, cat: g.category,
+    })));
+    products = products.slice(0, 12);
+  } else {
+    // 2) 데모 상품 목록(사진과 동일 분위기)
+    catName = MOCK_PRODUCTS.name;
+    products = MOCK_PRODUCTS.items.map(n => ({ name:n, image:null, cat:'home' }));
+  }
+  // 점수순 정렬
+  const rows = products.map(p => ({ ...p, m: demoMetrics(p.name) }))
+    .sort((a,b) => b.m.score - a.m.score);
+
+  let html = `<div class="pl-cat">📦 ${catName} <span class="pl-cnt">· ${rows.length}개 상품 · 기회 순위</span></div>`;
+  html += `<div class="pl-demo">⭐ 평점·리뷰수는 무료 API 미제공으로 <b>데모값</b>입니다 — 리뷰 수집(P2) 후 실데이터로 교체됩니다${isLive?' · 상품명/이미지는 네이버 실시간':''}.</div>`;
+  rows.forEach((r, i) => {
+    const m = r.m;
+    const active = focusProduct === r.name || (!focusProduct && i === 0);
+    const ch = (m.growth > 0 ? '+' : '') + m.growth + '%';
+    const chcls = m.growth > 0 ? 'up' : m.growth < 0 ? 'down' : 'same';
+    const stars = '★'.repeat(Math.round(m.rating)) + '☆'.repeat(5 - Math.round(m.rating));
+    const safeName = r.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    html += `<div class="pl-row ${active?'active':''}" onclick="pdtSelectProduct('${safeName}', '${r.cat||''}')">
+      <div class="pl-rank">${i+1}</div>
+      <div class="pl-thumb">${r.image?`<img src="${r.image}" alt="">`:'🛒'}</div>
+      <div class="pl-body">
+        <div class="pl-name">${r.name}</div>
+        <div class="pl-stars">${stars} ${m.rating} <span>(${m.reviews.toLocaleString()})</span></div>
+        <div class="pl-metrics"><span>검색 <b>${fmtK(m.search)}</b></span></div>
+      </div>
+      <div class="pl-side"><span class="pl-score">${m.score}</span><span class="pl-chg ${chcls}">${ch}</span></div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
+
+// ── 중앙: KPI 스트립 + 상품 패널(기존 render*Panel 재사용)
+function renderCenter(periodLabel) {
+  const el = document.getElementById('pdtCenter'); if (!el) return;
+  let html = renderKpiStrip(periodLabel);
+  html += renderCenterChart(periodLabel);
+  const platforms = currentPlatform === 'all' ? ['coupang', 'naver', 'instagram'] : [currentPlatform];
+  for (const p of platforms) {
+    if (p === 'naver') { html += renderNaverPanel(periodLabel); continue; }
+    if (p === 'china') { html += renderChinaPanel(periodLabel); continue; }
+    if (p === 'coupang') { html += renderCoupangPanel(periodLabel); continue; }
+    if (p === 'instagram') { html += renderInstaPanel(periodLabel); continue; }
+  }
+  el.innerHTML = html;
+}
+
+function renderKpiStrip(periodLabel) {
+  const o = pdtFocusObj();
+  const title = o ? o.name : (focusName || '전체 분야');
+  if (o) {
+    const tr = oppTier(o.score);
+    const t = focusTrends(o);
+    const searchNow = t.search[t.search.length-1];
+    const reviewGrow = Math.round((t.review[t.review.length-1]/t.review[0]-1)*100);
+    const cards = [
+      { l:'🎯 기회점수', v:o.score, s:tr.t, cls:'' },
+      { l:'🔎 월 검색량', v:fmtK(searchNow), s:'네이버 추정', cls:'' },
+      { l:'📝 리뷰 증가율', v:'+'+reviewGrow+'%', s:'6개월 대비', cls:'kpi-pos' },
+      { l:'🚀 성장점수', v:o.growth, s:(o.change>0?'+':'')+o.change+'%', cls: o.change>=0?'kpi-pos':'kpi-neg' },
+      { l:'⚔️ 경쟁강도', v:oppCompLabel(o.comp), s:'낮을수록 유리', cls:'' },
+      { l:'📊 시장규모', v:o.size>=60?'대':o.size>=40?'중':'소', cls:'', s:'지수 '+o.size },
+    ];
+    return `<div class="kpi-head">
+      <div class="kpi-title">📈 ${title} 분석 <span class="kpi-score" style="background:${tr.bg};color:${tr.c}">${o.score}점 · ${tr.t}</span>${o.demo?' <span class="kpi-score" style="background:#FEF3C7;color:#92400E">데모</span>':''}</div>
+      <div class="kpi-note">기회점수 = 성장 40% + 시장 25% + 경쟁 35% · ${o.demo?'네이버 연결 시 실데이터로 교체':'평점/리뷰는 리뷰수집(P2) 후 실데이터'}</div>
+    </div>
+    <div class="kpi-strip kpi6">${cards.map(c=>`<div class="kpi"><div class="kpi-l">${c.l}</div><div class="kpi-v ${c.cls||''}">${c.v}</div><div class="kpi-s">${c.s}</div></div>`).join('')}</div>`;
+  }
+  return `<div class="kpi-head">
+    <div class="kpi-title">📈 ${title} 분석</div>
+    <div class="kpi-note">네이버 연결 시 성장·시장·경쟁 지표가 채워집니다</div>
+  </div>
+  <div class="kpi-strip">
+    ${['🚀 성장점수','📊 시장규모','⚔️ 경쟁도'].map(l=>`<div class="kpi"><div class="kpi-l">${l}</div><div class="kpi-v">–</div><div class="kpi-s">네이버 필요</div></div>`).join('')}
+    <div class="kpi"><div class="kpi-l">⭐ 평점</div><div class="kpi-v">–</div><div class="kpi-s">리뷰 입력 필요</div></div>
+  </div>`;
+}
+
+// ── 중앙: 선형 추이 차트(검색량·리뷰·판매추정) + 탭
+let centerChartTab = 'trend';
+function setCenterTab(t){ centerChartTab = t; renderCenter({ daily:'일간', weekly:'주간', monthly:'월간', yearly:'연간' }[currentPeriod]); }
+function renderCenterChart(periodLabel) {
+  const o = pdtFocusObj();
+  const tabs = [['trend','📈 트렌드 차트'],['price','💰 가격 분석'],['compete','⚔️ 경쟁 비교'],['sales','🛒 판매 추정'],['season','🗓️ 시즌성']];
+  const tabBar = `<div class="cchart-tabs">${tabs.map(([k,l])=>`<button class="cchart-tab ${centerChartTab===k?'active':''}" onclick="setCenterTab('${k}')">${l}</button>`).join('')}</div>`;
+  if (!o) {
+    return `<div class="cchart-panel">${tabBar}<div class="cchart-note">좌측에서 상품/분야를 선택하면 검색량·리뷰·판매 추이가 표시됩니다.</div></div>`;
+  }
+  const t = focusTrends(o);
+  let body;
+  if (centerChartTab === 'trend' || centerChartTab === 'sales') {
+    const cells = [
+      ['검색량 추이', t.search, '#FF7A2F', fmtK(t.search[t.search.length-1])],
+      ['리뷰 증가 추이', t.review, '#03C75A', fmtK(t.review[t.review.length-1])+'건'],
+      ['판매 추정 추이', t.sales, '#7C3AED', '₩'+fmtK(t.sales[t.sales.length-1])],
+    ];
+    body = `<div class="cchart-body">${cells.map(([title,vals,col,now])=>`
+      <div class="cchart-cell"><h5><span>${title}</span><b>${now}</b></h5>${sparkline(vals, col)}
+      <div class="cchart-note" style="padding:4px 0 0">최근 6개월 · 신호기반 추정</div></div>`).join('')}</div>`;
+  } else if (centerChartTab === 'price') {
+    body = `<div class="cchart-note">💰 가격대별 분포는 하단 '가격대별 선호도'에서, 실제 상품 가격은 아래 패널에서 확인하세요. (가격 비교 차트는 다음 단계)</div>`;
+  } else if (centerChartTab === 'compete') {
+    body = `<div class="cchart-note">⚔️ 경쟁 강도: <b>${oppCompLabel(o.comp)}</b> · 시장규모 지수 ${o.size}. 경쟁 상품 TOP은 아래 네이버 패널에서 카테고리를 누르면 불러옵니다.</div>`;
+  } else {
+    body = `<div class="cchart-note">🗓️ 시즌성 분석은 연간 데이터 누적(P4) 후 제공됩니다. 현재는 최근 6개월 추이로 대체합니다.</div>`;
+  }
+  return `<div class="cchart-panel">${tabBar}${body}</div>`;
+}
+
+// ── 우측: AI(규칙기반) 리포트 — 인기요인 / 불만요인 / 추천액션
+function aiSec(title, inner) { return `<div class="ai-sec"><div class="ai-h">${title}</div><ul class="ai-ul">${inner}</ul></div>`; }
+
+function renderRight(periodLabel) {
+  const el = document.getElementById('pdtRight'); if (!el) return;
+  const o = pdtFocusObj();
+  let html = `<div class="ai-badge">🧠 규칙기반 분석 · 무료(LLM 미사용) · AI 요약은 키 연결 후 추가 예정</div>`;
+  if (o) {
+    const tr = oppTier(o.score);
+    // 시장요약 문단(규칙기반 자연어)
+    const growWord = o.growth>=70?'빠르게 성장 중':o.growth>=45?'완만히 성장 중':'성숙·정체 구간';
+    const compWord = o.comp>=67?'경쟁이 낮아 진입 여지가 큽니다':o.comp>=34?'경쟁은 중간 수준입니다':'경쟁이 치열해 차별화가 필요합니다';
+    html += `<div class="ai-summary"><b>${o.name}</b> 시장은 ${growWord}이며(검색 ${(o.change>0?'+':'')+o.change}%), ${compWord}. 시장규모 지수 ${o.size}, 종합 기회점수 <b>${o.score}점(${tr.t})</b>.</div>`;
+    // 기회 게이지 (성공확률 단정 대신 기회점수 — 6/22 합의 유지)
+    html += `<div class="opp-gauge">
+      <div class="g-label">종합 기회점수</div>
+      <div class="g-num">${o.score}<span style="font-size:18px">점</span></div>
+      <div class="g-track"><div class="g-fill" style="width:${o.score}%"></div></div>
+      <div class="g-tier" style="color:${tr.c}">${tr.t} 신호</div>
+      <div class="g-hint">※ 성공확률이 아닌 <b>우선순위 점수</b>입니다. 성과 데이터 누적 후(P4) 정밀화됩니다.</div>
+    </div>`;
+    const pop = [];
+    if (o.growth >= 70) pop.push(`성장세 강함 — 검색 <b>${(o.change>0?'+':'')+o.change}%</b>`);
+    if (o.size >= 60) pop.push(`시장 규모 큼 — 지수 <b>${o.size}</b>`);
+    if (o.comp >= 67) pop.push(`경쟁 낮아 <b>진입 여지</b> 큼`);
+    if (!pop.length) pop.push('뚜렷한 강점 신호는 약함 — 세부 상품 단위 확인 권장');
+    let act;
+    if (o.score >= 75) act = ['지금 <b>소싱 후보</b>로 검토', '상위 상품 리뷰 분석으로 차별점 찾기', '발주 전 가격·마진 시뮬레이션'];
+    else if (o.score >= 60) act = ['<b>관심 목록</b>에 넣고 추이 관찰', '경쟁 상품 리뷰로 빈틈 탐색'];
+    else act = ['지금은 <b>보류</b> — 다른 분야 우선', '신호가 바뀌면 재검토'];
+    html += aiSec('🔥 인기 요인', pop.map(t=>`<li>${t}</li>`).join(''));
+    html += `<div class="ai-signal">📌 ${oppSignalText(o)}</div>`;
+    html += `<div id="aiReviewSlot">${aiSec('😟 불만 요인', '<li class="ai-muted">리뷰 분석을 입력·저장하면 표시됩니다</li>')}</div>`;
+    html += aiSec('✅ 추천 액션', act.map(t=>`<li>${t}</li>`).join(''));
+    el.innerHTML = html;
+    loadFocusReview();
+  } else {
+    html += `<div class="ai-empty">좌측에서 분야를 선택하면<br>인기요인 · 불만요인 · 추천액션을<br>여기에 정리합니다.</div>`;
+    el.innerHTML = html;
+  }
+}
+
+// 최근 저장된 리뷰 분석을 우측 '불만 요인'에 연결 (Supabase 재사용)
+async function loadFocusReview() {
+  if (!sb) return;
+  try {
+    const { data } = await sb.from('review_analysis').select('product_name,neg_keywords,insight').order('created_at', { ascending: false }).limit(1);
+    if (!data || !data.length) return;
+    const slot = document.getElementById('aiReviewSlot'); if (!slot) return;
+    const r = data[0];
+    const negs = (r.neg_keywords || []).slice(0, 5).map(k => `<li>${k[0]} <b>${k[1]}</b></li>`).join('') || '<li class="ai-muted">감지된 불만 없음</li>';
+    slot.innerHTML = aiSec(`😟 불만 요인 <span class="ai-tag">최근: ${r.product_name || '-'}</span>`, negs)
+      + (r.insight ? `<div class="ai-signal">💡 ${r.insight}</div>` : '');
+  } catch (e) { /* 무시 */ }
+}
+
+// ── 하단: 핫 키워드 / 플랫폼 트렌드 / 리뷰 감정
+// 도넛 SVG (segments: [{pct,color}])
+function donutSVG(segs, size=86) {
+  const r = size/2 - 9, c = 2*Math.PI*r, cx = size/2;
+  let off = 0;
+  const arcs = segs.map(s => {
+    const len = c * s.pct / 100;
+    const el = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${s.color}" stroke-width="14" stroke-dasharray="${len.toFixed(2)} ${(c-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})"/>`;
+    off += len; return el;
+  }).join('');
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${arcs}</svg>`;
+}
+
+function renderBottom(periodLabel) {
+  const el = document.getElementById('pdtBottom'); if (!el) return;
+  const o = pdtFocusObj();
+  const name = o ? o.name : (focusProduct || '상품');
+  const isDemo = !o || o.demo;
+  // 리뷰 요약 키워드(데모: 사진과 동일 톤). 실제 분석은 헤더 📝/Supabase에서.
+  const posKw = [['저소음',28.5,'#0F9D58'],['배터리 오래감',24.3,'#0F9D58'],['바람 세기',18.7,'#0F9D58'],['휴대성',12.1,'#0F9D58'],['디자인',8.6,'#0F9D58']];
+  const negKw = [['무게',31.0,'#EF4444'],['충전 속도',26.4,'#EF4444'],['내구성',19.2,'#EF4444'],['소음(고속)',13.1,'#EF4444'],['가격',10.3,'#EF4444']];
+  const kwbars = (arr) => arr.map(([k,v,c])=>`<div class="kwbar"><div class="kwbar-top"><b>${k}</b><span>${v}%</span></div><div class="kwbar-track"><div class="kwbar-fill" style="width:${v}%;background:${c}"></div></div></div>`).join('');
+  // 워드클라우드(데모)
+  const cloud = [['저소음',5],['배터리',5],['가벼움',4],['바람세기',4],['휴대성',3],['디자인',3],['조용함',2],['화전',2],['지웟참',2]];
+  const cloudHtml = cloud.map(([t,s])=>`<span class="keyword-tag kw-size-${s}" onclick="searchKeyword('${t}')">${t}</span>`).join('');
+  // 감성 도넛(데모)
+  const sent = [{pct:78.2,color:'#0F9D58'},{pct:15.3,color:'#9CA3AF'},{pct:6.5,color:'#EF4444'}];
+  // 가격대별 선호도(데모)
+  const price = [['~3만원',18.3],['3~5만원',42.7],['5~7만원',28.6],['7~10만원',7.6],['10만원~',2.8]];
+  const pmax = Math.max(...price.map(p=>p[1]));
+  const pbars = price.map(([k,v])=>`<div class="kwbar"><div class="kwbar-top"><b>${k}</b><span>${v}%</span></div><div class="kwbar-track"><div class="kwbar-fill" style="width:${Math.round(v/pmax*100)}%;background:var(--primary)"></div></div></div>`).join('');
+
+  el.innerHTML = `<div class="bot-grid4">
+    <div class="bot-card">
+      <div class="bot-h">📋 리뷰 요약 분석 ${isDemo?'<span class="demo-tag">데모</span>':''}</div>
+      <div class="rb-toggle"><button class="active" onclick="rbTab(this,'pos')">긍정 키워드</button><button onclick="rbTab(this,'neg')">부정 키워드</button></div>
+      <div id="rbPos">${kwbars(posKw)}</div>
+      <div id="rbNeg" style="display:none">${kwbars(negKw)}</div>
+    </div>
+    <div class="bot-card">
+      <div class="bot-h">☁️ 리뷰 키워드 ${isDemo?'<span class="demo-tag">데모</span>':''}</div>
+      <div class="keyword-cloud" style="padding:8px 0">${cloudHtml}</div>
+    </div>
+    <div class="bot-card">
+      <div class="bot-h">🍩 리뷰 감성 분석 ${isDemo?'<span class="demo-tag">데모</span>':''}</div>
+      <div class="donut-wrap">
+        ${donutSVG(sent)}
+        <div class="donut-legend">
+          <div><span class="dot2" style="background:#0F9D58"></span>긍정 <b>78.2%</b></div>
+          <div><span class="dot2" style="background:#9CA3AF"></span>중립 <b>15.3%</b></div>
+          <div><span class="dot2" style="background:#EF4444"></span>부정 <b>6.5%</b></div>
+        </div>
+      </div>
+      <div id="botReview" style="margin-top:8px"></div>
+    </div>
+    <div class="bot-card">
+      <div class="bot-h">💰 가격대별 선호도 ${isDemo?'<span class="demo-tag">데모</span>':''}</div>
+      ${pbars}
+    </div>
+  </div>`;
+  loadBottomReview();
+}
+function rbTab(btn, which){
+  document.querySelectorAll('#rbPos,#rbNeg').forEach(e=>e.style.display='none');
+  document.getElementById(which==='pos'?'rbPos':'rbNeg').style.display='';
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function loadBottomReview() {
+  if (!sb) return;
+  try {
+    const { data } = await sb.from('review_analysis').select('product_name,pos_pct,neg_pct,insight').order('created_at', { ascending: false }).limit(1);
+    if (!data || !data.length) return;
+    const r = data[0]; const neu = Math.max(0, 100 - r.pos_pct - r.neg_pct);
+    const el = document.getElementById('botReview'); if (!el) return;
+    el.innerHTML = `<div style="font-size:12px;font-weight:700;margin-bottom:6px">${r.product_name || '(이름없음)'}</div>
+      <div class="rev-sum-bar"><div style="width:${r.pos_pct}%;background:#0F9D58"></div><div style="width:${neu}%;background:#D1D5DB"></div><div style="width:${r.neg_pct}%;background:#EF4444"></div></div>
+      <div class="rev-sum-leg"><span style="color:#0F9D58">😊 ${r.pos_pct}%</span><span style="color:#6B7280">😐 ${neu}%</span><span style="color:#EF4444">😟 ${r.neg_pct}%</span></div>
+      ${r.insight ? `<div style="font-size:12px;color:var(--sub)">💡 ${r.insight}</div>` : ''}`;
+  } catch (e) { /* 무시 */ }
+}
+
+function renderOpportunityPanel() {
+  const catMapRev = { '식품':'food', '화장품/미용':'beauty', '패션의류':'fashion', '가구/인테리어':'home', '출산/육아':'kids', '스포츠/레저':'pet', '디지털/가전':'digital' };
+  const tier = s => s >= 75 ? { c:'#0F9D58', bg:'#E7F6EE', t:'추천' } : s >= 60 ? { c:'#D97706', bg:'#FEF3C7', t:'관심' } : { c:'#6B7280', bg:'#F3F4F6', t:'보류' };
+  const compLabel = c => c >= 67 ? '낮음(유리)' : c >= 34 ? '중간' : '높음';
+  const signal = o => {
+    const g = o.growth >= 70, lowComp = o.comp >= 67, big = o.size >= 60;
+    if (g && lowComp) return '🟢 성장 강함 · 경쟁 낮음 → 진입 유리';
+    if (g && !lowComp) return '🟡 성장 강하나 경쟁 치열 → 차별화 필요';
+    if (!g && lowComp && big) return '🔵 시장 크고 경쟁 낮음 → 안정적 기회';
+    if (!g && !lowComp) return '⚪ 성숙·경쟁 시장 → 신중 검토';
+    return '⚪ 추가 신호 확인 필요';
+  };
+  let html = `<div class="trend-panel" style="grid-column: span 3; border:1.5px solid var(--primary)">
+    <div class="panel-header" style="background:#FFF9F5">
+      <div class="panel-title">🎯 오늘의 기회점수 <span style="font-size:11px;font-weight:500;color:var(--sub)">· 어떤 분야를 파고들지 우선순위</span></div>
+      <button class="refresh-btn" onclick="loadOpportunity()">↻ 재계산</button>
+    </div>
+    <div class="opp-grid">`;
+  opportunityData.forEach((o, idx) => {
+    const tr = tier(o.score);
+    const catKey = catMapRev[o.name];
+    html += `<div class="opp-card" ${catKey ? `onclick="oppDrill('${catKey}')" style="cursor:pointer"` : ''}>
+      <div class="opp-top">
+        <div class="opp-rank">${idx+1}</div>
+        <div class="opp-name">${o.name}</div>
+        <div class="opp-score" style="background:${tr.bg};color:${tr.c}">${o.score}점 · ${tr.t}</div>
+      </div>
+      <div class="opp-bars">
+        <div class="opp-bar"><span>성장</span><div class="opp-track"><div style="width:${o.growth}%;background:#EF4444"></div></div><b>${(o.change>0?'+':'')+o.change}%</b></div>
+        <div class="opp-bar"><span>시장</span><div class="opp-track"><div style="width:${o.size}%;background:#03C75A"></div></div><b>${o.size}</b></div>
+        <div class="opp-bar"><span>경쟁</span><div class="opp-track"><div style="width:${o.comp}%;background:#3B82F6"></div></div><b>${compLabel(o.comp)}</b></div>
+      </div>
+      <div class="opp-signal">${signal(o)}</div>
+    </div>`;
+  });
+  html += `</div>
+    <div style="padding:8px 20px 14px;font-size:11px;color:var(--sub)">
+      ※ 점수 = 성장률 40% + 시장규모 25% + (낮은)경쟁도 35%. <b>평점·리뷰 신호는 리뷰 데이터 확보(다음 단계) 후 추가</b>됩니다. 카드를 누르면 해당 분야 실제 상품을 봅니다.
+    </div>
+  </div>`;
+  return html;
+}
+
+function oppDrill(catKey) {
+  const btn = [...document.querySelectorAll('.cat-btn')].find(b => b.getAttribute('onclick')?.includes(`'${catKey}'`));
+  currentCategory = catKey;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (currentPlatform !== 'naver') { currentPlatform = 'naver'; document.querySelectorAll('.platform-tab').forEach(b => b.classList.toggle('active', b.dataset.platform === 'naver')); }
+  render();
+  if (isNaverConfigured) loadNaverData(currentPeriod, null);
+  showToast(`"${catKey}" 분야 상품을 불러옵니다`);
+}
+
+function renderNaverPanel(periodLabel) {
+  const haslive = naverLiveData && naverLiveData.length > 0;
+  const data = haslive ? naverLiveData : null;
+  const maxRatio = haslive ? Math.max(...data.map(d => parseFloat(d.ratio))) : 100;
+
+  let html = `<div class="trend-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="panel-platform-badge badge-naver">네이버 쇼핑</span>
+        ${periodLabel} 카테고리 트렌드
+      </div>
+      <button class="refresh-btn" id="naverRefreshBtn" onclick="loadNaverData('${currentPeriod}', this)">↻ 새로고침</button>
+    </div>`;
+
+  if (haslive) {
+    html += `<div style="padding:8px 20px 0; font-size:11px; color:var(--sub)">👇 카테고리를 누르면 그 분야 실제 상품 TOP 20을 불러옵니다</div>`;
+    html += `<div class="naver-chart">`;
+    data.forEach(item => {
+      const pct = Math.round((parseFloat(item.ratio) / maxRatio) * 100);
+      const changeStr = item.change > 0 ? `+${item.change}%` : item.change < 0 ? `${item.change}%` : '=';
+      html += `<div class="chart-bar-row" onclick="loadCategoryProducts('${item.name}')" title="${item.name} TOP 20 상품 보기">
+        <div class="chart-label">${item.name}</div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:${pct}%"><span>${item.ratio}</span></div></div>
+        <div class="chart-change ${item.trend}">${changeStr}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    // Mock naver data as chart
+    const mockNaver = [
+      { name:'식품/건강', ratio:85, trend:'up', change:'+12%' },
+      { name:'뷰티/화장품', ratio:78, trend:'up', change:'+8%' },
+      { name:'패션/의류', ratio:72, trend:'up', change:'+5%' },
+      { name:'홈/리빙', ratio:68, trend:'up', change:'+15%' },
+      { name:'유아동', ratio:55, trend:'same', change:'0%' },
+      { name:'반려동물', ratio:61, trend:'up', change:'+9%' },
+      { name:'디지털/가전', ratio:48, trend:'down', change:'-3%' },
+    ];
+    html += `<div class="naver-chart">`;
+    mockNaver.forEach(item => {
+      html += `<div class="chart-bar-row" onclick="showToast('${item.name} 카테고리 트렌드')">
+        <div class="chart-label">${item.name}</div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:${item.ratio}%"><span>${item.ratio}</span></div></div>
+        <div class="chart-change ${item.trend}">${item.change}</div>
+      </div>`;
+    });
+    html += `</div>`;
+    html += `<div style="text-align:center; padding: 0 20px 16px; font-size:12px; color:var(--sub)">
+      ⚠️ 목업 데이터 · <a href="#" onclick="openSetupModal(); return false" style="color:var(--primary)">네이버 API 연결하기</a>
+    </div>`;
+  }
+  // ===== 실제 상품 섹션 =====
+  if (naverProducts && naverProducts.length > 0) {
+    // 카테고리 필터 적용 (전체가 아니면 매칭되는 카테고리만)
+    const catMap = { food:'식품', beauty:'화장품/미용', fashion:'패션의류', home:'가구/인테리어', kids:'출산/육아', pet:'반려동물', digital:'디지털/가전' };
+    let groups = naverProducts;
+    if (currentCategory !== 'all') {
+      const want = catMap[currentCategory];
+      groups = naverProducts.filter(g => g.isSearch || g.category === want);
+    }
+    const totalCount = groups.reduce((s,g)=>s+g.items.length,0);
+    const catLabelTxt = currentCategory !== 'all' ? `${catMap[currentCategory]} TOP ${totalCount}` : `인기 상품 ${totalCount}`;
+    html += `<div style="border-top:1px solid var(--border); padding:14px 20px 4px; font-size:13px; font-weight:700; color:var(--text)">🛒 실시간 ${catLabelTxt} <span style="font-size:11px;font-weight:500;color:var(--sub)">· 네이버쇼핑 실제 판매중</span></div>`;
+    html += `<div class="trend-list">`;
+    if (groups.length === 0) {
+      html += `<div class="empty-state"><div class="icon">🔍</div><p>이 카테고리 상품은<br>다른 탭에서 확인하세요</p></div>`;
+    } else {
+      let rank = 0;
+      groups.forEach(g => {
+        // 같은 검색어 상품군의 가격 분포 (네이버 hprice 미제공 대체 지표)
+        const gp = g.items.map(i => i.priceLow || i.price || 0).filter(p => p > 0);
+        const gmin = gp.length ? Math.min(...gp) : 0;
+        const gmax = gp.length ? Math.max(...gp) : 0;
+        const groupRange = (gmin && gmax && gmax > gmin) ? `${gmin.toLocaleString()}~${gmax.toLocaleString()}원` : (gmin ? `${gmin.toLocaleString()}원` : '-');
+        g.items.forEach(item => {
+          rank++;
+          const id = 'np_' + (item.productId || (g.category + rank));
+          const sel = !!selectedItems[id];
+          const priceRange = item.priceRangeText || item.priceText;
+          const sItem = {
+            id, name: item.name, category: g.category, subCategory: item.subCategory,
+            cat: currentCategory, emoji: '🛒', trend: 'up',
+            change: item.priceText, priceRange, target: g.searchKeyword + ' 검색',
+            keywords: [g.searchKeyword, item.brand].filter(Boolean),
+            reason: `${item.mallName} 판매 · 트렌드 카테고리 "${g.category}" 인기 상품`,
+            link: item.link, image: item.image, mallName: item.mallName, brand: item.brand
+          };
+          const safe = JSON.stringify(sItem).replace(/'/g,"&#39;");
+          const hasRange = item.priceRangeText && item.priceRangeText !== item.priceText;
+          html += `<div class="trend-item ${sel?'selected':''}">
+            <div class="item-top">
+              <div class="rank ${rank<=3?'top3':''}">${rank}</div>
+              <div class="item-emoji" style="overflow:hidden;padding:0">${item.image?`<img src="${item.image}" style="width:100%;height:100%;object-fit:cover" />`:'🛒'}</div>
+              <div class="item-main">
+                <div class="item-name">${item.name}</div>
+                <div class="item-sub">
+                  <span>📂 ${g.category}</span>
+                  ${item.subCategory?`<span class="sep">|</span><span>└ ${item.subCategory}</span>`:''}
+                </div>
+              </div>
+              <div class="item-right">
+                <span class="trend-change up">${item.priceText}</span>
+              </div>
+            </div>
+            <div class="item-details">
+              <div class="detail-chip"><div class="d-label">💵 이 상품가</div><div class="d-value">${item.priceText}</div></div>
+              <div class="detail-chip"><div class="d-label">📊 '${g.searchKeyword}' 시장가</div><div class="d-value">${groupRange}</div></div>
+              <div class="detail-chip"><div class="d-label">🏪 판매처</div><div class="d-value">${item.mallName}</div></div>
+              <div class="detail-chip"><div class="d-label">🔖 브랜드</div><div class="d-value">${item.brand||'-'}</div></div>
+            </div>
+            <div class="item-keywords">
+              <span class="kw-tag hot">#${g.searchKeyword}</span>
+              ${item.brand?`<span class="kw-tag">#${item.brand}</span>`:''}
+            </div>
+            <div class="item-reason">💡 트렌드 카테고리 <b>"${g.category}"</b>에서 검색어 <b>"${g.searchKeyword}"</b>로 조회된 실제 판매 상품</div>
+            <div class="item-footer" style="gap:8px">
+              <a href="${item.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 상품보기</a>
+              <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","naver",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
+            </div>
+          </div>`;
+        });
+      });
+    }
+    html += `</div>`;
+  } else if (haslive) {
+    html += `<div style="text-align:center; padding: 4px 20px 16px; font-size:12px; color:var(--sub)">
+      🛒 실제 상품을 불러오려면 <a href="#" onclick="loadNaverData('${currentPeriod}', null); return false" style="color:var(--primary)">새로고침</a>
+    </div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function renderChinaPanel(periodLabel) {
+  // 타오바오 우선, 없으면 알리, 둘 다 없으면 목업
+  const live = (taobaoLiveData && taobaoLiveData.length) ? taobaoLiveData : aliLiveData;
+  const isReal = live && live.length > 0;
+  const srcName = (taobaoLiveData && taobaoLiveData.length) ? '타오바오' : '알리';
+  const refreshFn = isTaobaoConfigured ? 'loadTaobaoData(this)' : 'loadAliData(this)';
+  let items = isReal ? live : getFilteredItems(MOCK.china[currentPeriod] || []);
+
+  let html = `<div class="trend-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="panel-platform-badge badge-china">중국 직구</span>
+        ${isReal ? srcName+' 인기상품' : periodLabel+' 알리·테무 트렌드'} ${isReal ? '<span class="live-badge">실시간</span>' : '<span class="mock-badge">목업</span>'}
+      </div>
+      <button class="refresh-btn" onclick="${refreshFn}">↻ 새로고침</button>
+    </div>`;
+
+  if (!isAliConfigured && !isReal) {
+    html += `<div style="padding:10px 20px 0; font-size:12px; color:var(--sub)">
+      ⚠️ 목업 데이터 · <a href="#" onclick="openSetupModal(); return false" style="color:var(--primary)">알리 API 연결하기</a> (App Key 입력 시 실시간 전환)
+    </div>`;
+  }
+
+  html += `<div class="trend-list">`;
+  if (items.length === 0) {
+    html += `<div class="empty-state"><div class="icon">🔍</div><p>해당 카테고리 직구 트렌드 없음</p></div>`;
+  } else {
+    items.forEach((item, idx) => {
+      const rank = idx + 1;
+      const id = 'cn_' + (item.id || item.productId || rank);
+      const sel = !!selectedItems[id];
+      const srcBadge = item.source === '테무' ? '🟠 테무' : item.source === '알리' ? '🔴 알리' : item.source === '타오바오' ? '🟡 타오바오' : '🛒 직구';
+      const sItem = {
+        id, name: item.name, category: item.category, subCategory: item.subCategory,
+        cat: item.cat || currentCategory, emoji: item.emoji || '🛒', trend: item.trend || 'up',
+        change: item.priceText, priceRange: item.priceText + (item.originalPrice?` (정가 ${(item.originalPrice).toLocaleString?.()||item.originalPrice}원)`:''),
+        target: (item.source||'직구') + ' · 판매량 ' + (item.salesVolume?.toLocaleString?.()||item.salesVolume||'-'),
+        keywords: item.keywords || [], reason: item.reason || '',
+        link: item.link, image: item.image, mallName: item.shopName || item.source, brand: item.source
+      };
+      const safe = JSON.stringify(sItem).replace(/'/g,"&#39;");
+      const vol = item.salesVolume ? (typeof item.salesVolume==='number' ? item.salesVolume.toLocaleString() : item.salesVolume) : '-';
+      const orig = item.originalPrice ? (typeof item.originalPrice==='number' ? item.originalPrice.toLocaleString()+'원' : item.originalPrice) : null;
+      html += `<div class="trend-item ${sel?'selected':''}">
+        <div class="item-top">
+          <div class="rank ${rank<=3?'top3':''}">${rank}</div>
+          <div class="item-emoji" style="overflow:hidden;padding:0">${item.image?`<img src="${item.image}" style="width:100%;height:100%;object-fit:cover" />`:item.emoji||'🛒'}</div>
+          <div class="item-main">
+            <div class="item-name">${item.name}</div>
+            <div class="item-sub">
+              <span>${srcBadge}</span>
+              <span class="sep">|</span><span>📂 ${item.category}</span>
+              ${item.subCategory?`<span class="sep">|</span><span>${item.subCategory}</span>`:''}
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="trend-change up">${item.priceText}</span>
+            ${item.discount?`<span style="font-size:11px;color:var(--china);font-weight:700">▼${item.discount}</span>`:''}
+          </div>
+        </div>
+        <div class="item-details">
+          <div class="detail-chip"><div class="d-label">🔥 판매량</div><div class="d-value">${vol}건</div></div>
+          <div class="detail-chip"><div class="d-label">⭐ 평점</div><div class="d-value">${item.rating||'-'} / 5</div></div>
+          <div class="detail-chip"><div class="d-label">💵 현재가</div><div class="d-value">${item.priceText}</div></div>
+          <div class="detail-chip"><div class="d-label">🏷️ 정가</div><div class="d-value" style="${orig?'text-decoration:line-through;color:var(--sub)':''}">${orig||'-'}</div></div>
+        </div>
+        <div class="item-keywords">
+          ${(item.keywords||[]).map((k,i)=>`<span class="kw-tag ${i<1?'hot':''}">#${k}</span>`).join('')}
+        </div>
+        ${item.reason?`<div class="item-reason">💡 ${item.reason}</div>`:''}
+        <div class="item-footer" style="gap:8px">
+          ${item.link?`<a href="${item.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 상품보기</a>`:''}
+          <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","china",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
+        </div>
+      </div>`;
+    });
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+function renderCoupangPanel(periodLabel) {
+  const isReal = coupangLiveData && coupangLiveData.length > 0;
+  // 쿠팡 키가 연결됐는데 아직 실데이터 전이면: 목업 대신 로딩 표시 + 자동 로드
+  if (isCoupangConfigured && !isReal) {
+    if (!window._cpLoading) {
+      window._cpLoading = true;
+      setTimeout(() => { loadCoupangData(null).finally(() => { window._cpLoading = false; }); }, 30);
+    }
+    return `<div class="trend-panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="panel-platform-badge badge-coupang">쿠팡</span> ${currentCategory!=='all'?'카테고리 베스트':'골드박스 특가'} <span class="live-badge">실시간</span></div>
+        <button class="refresh-btn" onclick="loadCoupangData(this)">↻ 새로고침</button>
+      </div>
+      <div class="empty-state"><div class="icon">🛒</div><p>쿠팡 실시간 상품을 불러오는 중...</p></div>
+    </div>`;
+  }
+  const items = isReal ? coupangLiveData : getFilteredItems(MOCK.coupang[currentPeriod] || []);
+  const srcLabel = currentCategory !== 'all' ? '카테고리 베스트' : '골드박스 특가';
+
+  let html = `<div class="trend-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="panel-platform-badge badge-coupang">쿠팡</span>
+        ${isReal ? srcLabel : periodLabel+' 트렌드'} ${isReal ? '<span class="live-badge">실시간</span>' : '<span class="mock-badge">목업</span>'}
+      </div>
+      <button class="refresh-btn" onclick="loadCoupangData(this)">↻ 새로고침</button>
+    </div>`;
+
+  if (isReal) {
+    html += `<div style="padding:9px 20px 0; font-size:11px; color:var(--sub)">📌 쿠팡은 <b>'현재' 인기 기준</b>입니다 (일/주/월/년 기간 선택과 무관 — 쿠팡 API가 기간별 데이터를 제공하지 않음)</div>`;
+  }
+  if (!isCoupangConfigured && !isReal) {
+    html += `<div style="padding:10px 20px 0; font-size:12px; color:var(--sub)">
+      ⚠️ 목업 데이터 · <a href="#" onclick="openSetupModal(); return false" style="color:var(--primary)">쿠팡 API 연결하기</a> (키 입력 시 실시간 전환)
+    </div>`;
+  }
+
+  html += `<div class="trend-list">`;
+  if (items.length === 0) {
+    html += `<div class="empty-state"><div class="icon">🔍</div><p>해당 카테고리 상품 없음</p></div>`;
+  } else {
+    items.forEach((item, idx) => {
+      const rank = item.rank || (idx + 1);
+      const id = 'cp_' + (item.productId || item.id || rank);
+      const sel = !!selectedItems[id];
+      const priceTxt = item.priceText || item.change || '';
+      const sItem = {
+        id, name: item.name, category: item.category, subCategory: item.subCategory || '',
+        cat: item.cat || currentCategory, emoji: item.emoji || '🛒', trend: 'up',
+        change: priceTxt, priceRange: priceTxt,
+        target: '쿠팡' + (item.isRocket ? ' · 로켓배송' : ''),
+        keywords: item.keywords || [], reason: item.reason || '',
+        link: item.link, image: item.image, mallName: '쿠팡', brand: '쿠팡'
+      };
+      const safe = JSON.stringify(sItem).replace(/'/g,"&#39;");
+      html += `<div class="trend-item ${sel?'selected':''}">
+        <div class="item-top">
+          <div class="rank ${rank<=3?'top3':''}">${rank}</div>
+          <div class="item-emoji" style="overflow:hidden;padding:0">${item.image?`<img src="${item.image}" style="width:100%;height:100%;object-fit:cover" />`:item.emoji||'🛒'}</div>
+          <div class="item-main">
+            <div class="item-name">${item.name}</div>
+            <div class="item-sub">
+              <span>🛒 ${item.category||'쿠팡'}</span>
+              ${item.isRocket?`<span class="sep">|</span><span style="color:#00A8E8;font-weight:700">🚀 로켓배송</span>`:''}
+              ${item.isFreeShipping?`<span class="sep">|</span><span>무료배송</span>`:''}
+            </div>
+          </div>
+          <div class="item-right">
+            <span class="trend-change up">${priceTxt}</span>
+          </div>
+        </div>
+        ${item.note?`<div class="item-reason">💡 ${item.note}</div>`:''}
+        <div class="item-footer" style="gap:8px">
+          ${item.link?`<a href="${item.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 상품보기</a>`:''}
+          <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","coupang",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
+        </div>
+      </div>`;
+    });
+  }
+  html += `</div></div>`;
+  return html;
+}
+
+function renderInstaPanel(periodLabel) {
+  const isReal = instaLiveData && instaLiveData.length > 0;
+  // 네이버 연결됐는데 아직 실데이터 전이면: 목업 대신 로딩 표시 + 자동 로드
+  if (isNaverConfigured && !isReal) {
+    if (!window._igLoading) {
+      window._igLoading = true;
+      setTimeout(() => { loadInstaData(null).finally(() => { window._igLoading = false; }); }, 30);
+    }
+    return `<div class="trend-panel">
+      <div class="panel-header">
+        <div class="panel-title"><span class="panel-platform-badge badge-instagram">인스타그램</span> 인기 해시태그 <span class="live-badge">네이버 기반</span></div>
+        <button class="refresh-btn" onclick="loadInstaData(this)">↻ 새로고침</button>
+      </div>
+      <div class="empty-state"><div class="icon">📷</div><p>인스타 해시태그 트렌드를 불러오는 중...</p></div>
+    </div>`;
+  }
+  let html = `<div class="trend-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span class="panel-platform-badge badge-instagram">인스타그램</span>
+        인기 해시태그 ${isReal ? '<span class="live-badge">네이버 기반</span>' : '<span class="mock-badge">목업</span>'}
+      </div>
+      <button class="refresh-btn" onclick="loadInstaData(this)">↻ 새로고침</button>
+    </div>`;
+
+  if (!isReal) {
+    const items = getFilteredItems(MOCK.instagram[currentPeriod] || []);
+    html += `<div style="padding:10px 20px 0; font-size:12px; color:var(--sub)">💡 해시태그 인기도는 <b>네이버 검색 데이터</b> 기반입니다 · <a href="#" onclick="loadInstaData(null); return false" style="color:var(--primary)">실데이터 불러오기</a></div>`;
+    html += `<div class="trend-list">`;
+    items.forEach((item, idx) => {
+      const sel = !!selectedItems[item.id];
+      const safe = JSON.stringify({...item, platform:'instagram'}).replace(/'/g,"&#39;");
+      html += `<div class="trend-item ${sel?'selected':''}">
+        <div class="item-top">
+          <div class="rank ${idx<3?'top3':''}">${idx+1}</div>
+          <div class="item-emoji">${item.emoji}</div>
+          <div class="item-main"><div class="item-name">${item.name}</div><div class="item-sub"><span>${item.category} · ${item.change}</span></div></div>
+          <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${item.id}","instagram",${safe})'>${sel?'✓':'+'}</button>
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+    return html;
+  }
+
+  // 실데이터: 해시태그 순위 + 인기도 막대 + 관련 상품
+  const maxPop = Math.max(...instaLiveData.map(t => t.popularity), 1);
+  html += `<div style="padding:8px 20px 0; font-size:11px; color:var(--sub)">📊 인기도 = 네이버 검색 상품 수 (관심도 지표) · 📌 '현재' 기준 (기간 선택과 무관) · 60분 캐시</div>`;
+  html += `<div class="trend-list">`;
+  instaLiveData.forEach((t, idx) => {
+    const pct = Math.round((t.popularity / maxPop) * 100);
+    const top = t.products && t.products[0];
+    const id = 'ig_' + (t.tag || idx);
+    const sel = !!selectedItems[id];
+    const sItem = {
+      id, name: t.tag, category: t.category, subCategory: '',
+      cat: t.cat, emoji: '📷', trend: 'up', change: `검색 ${(t.popularity).toLocaleString()}건`,
+      priceRange: top ? top.priceText : '', target: `네이버 검색어: ${t.keyword}`,
+      keywords: [t.keyword], reason: `인스타 인기 해시태그 "${t.tag}" → 네이버에서 "${t.keyword}" 관련 상품 ${(t.popularity).toLocaleString()}건`,
+      link: top ? top.link : '', image: top ? top.image : '', mallName: '네이버', brand: ''
+    };
+    const safe = JSON.stringify(sItem).replace(/'/g,"&#39;");
+    html += `<div class="trend-item ${sel?'selected':''}">
+      <div class="item-top">
+        <div class="rank ${idx<3?'top3':''}">${idx+1}</div>
+        <div class="item-emoji">📷</div>
+        <div class="item-main">
+          <div class="item-name">${t.tag}</div>
+          <div class="item-sub"><span>${t.category}</span><span class="sep">|</span><span>🔍 ${t.keyword}</span></div>
+        </div>
+        <div class="item-right"><span class="trend-change up">${(t.popularity).toLocaleString()}건</span></div>
+      </div>
+      <div class="chart-bar-wrap" style="margin:8px 0"><div class="chart-bar" style="width:${pct}%; background:var(--insta)"><span>${pct}</span></div></div>
+      ${(t.products && t.products.length) ? `<div class="item-keywords">${t.products.slice(0,3).map(p=>`<span class="kw-tag" onclick="window.open('${p.link}','_blank')" style="cursor:pointer">🛒 ${p.name.slice(0,16)}… ${p.priceText}</span>`).join('')}</div>` : ''}
+      <div class="item-footer" style="gap:8px">
+        ${top && top.link ? `<a href="${top.link}" target="_blank" class="select-btn" style="text-decoration:none">🔗 대표상품</a>` : ''}
+        <button class="select-btn ${sel?'selected':''}" onclick='toggleSelect("${id}","instagram",${safe})'>${sel?'✓ 선별됨':'+ 선별하기'}</button>
+      </div>
+    </div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+function renderPlatformChart(periodLabel) {
+  return `<div class="trend-panel" style="grid-column: span 3">
+    <div class="panel-header">
+      <div class="panel-title">📊 플랫폼별 트렌드 강도 (${periodLabel})</div>
+    </div>
+    <div class="naver-chart" style="padding: 16px 20px;">
+      <div class="chart-bar-row">
+        <div class="chart-label">쿠팡</div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:85%; background:var(--coupang)"><span>85</span></div></div>
+        <div class="chart-change up">+12%</div>
+      </div>
+      <div class="chart-bar-row">
+        <div class="chart-label">네이버</div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:92%; background:var(--naver)"><span>92</span></div></div>
+        <div class="chart-change up">+8%</div>
+      </div>
+      <div class="chart-bar-row">
+        <div class="chart-label">인스타그램</div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:78%; background:var(--insta)"><span>78</span></div></div>
+        <div class="chart-change up">+5%</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function updateSummary() {
+  const d = { daily:{ kw:'127', kc:'▲ 전일 +12%', nw:'34', nc:'▲ +8개', cat:'식품/건강', cc:'▲ +28%' }, weekly:{ kw:'489', kc:'▲ 전주 +8%', nw:'112', nc:'▲ +23개', cat:'패션/의류', cc:'▲ +41%' }, monthly:{ kw:'1,823', kc:'▲ 전월 +19%', nw:'378', nc:'▲ +67개', cat:'홈/리빙', cc:'▲ +55%' }, yearly:{ kw:'18,430', kc:'▲ 전년 +32%', nw:'2,140', nc:'▲ +890개', cat:'식품/건강', cc:'▲ +78%' } }[currentPeriod];
+  document.getElementById('summaryKeywords').textContent = d.kw;
+  document.getElementById('summaryKeywordsChange').textContent = d.kc;
+  document.getElementById('summaryNew').textContent = d.nw;
+  document.getElementById('summaryNewChange').textContent = d.nc;
+  document.getElementById('summaryCategory').textContent = d.cat;
+  document.getElementById('summaryCategoryChange').textContent = d.cc;
+}
+
+// ===== SELECT =====
+function toggleSelect(id, platform, item) {
+  if (selectedItems[id]) {
+    delete selectedItems[id];
+    showToast(`"${item.name}" 선별 해제`);
+    dbDeleteSelection(id);
+  } else {
+    const saved = { ...item, platform };
+    selectedItems[id] = saved;
+    showToast(`"${item.name}" 선별 추가 ✓${sb ? ' (동기화)' : ''}`);
+    dbUpsertSelection(id, saved);
+  }
+  const count = Object.keys(selectedItems).length;
+  document.getElementById('selectedCountBadge').textContent = count;
+  document.getElementById('summarySelected').textContent = count;
+  render();
+  if (document.getElementById('drawer').classList.contains('open')) renderDrawer();
+}
+
+// ===== DRAWER =====
+function openDrawer() { renderDrawer(); document.getElementById('drawer').classList.add('open'); document.getElementById('drawerOverlay').classList.add('open'); }
+function closeDrawer() { document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerOverlay').classList.remove('open'); }
+
+function renderDrawer() {
+  const items = Object.values(selectedItems);
+  const body = document.getElementById('drawerBody');
+  if (items.length === 0) {
+    body.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>아직 선별한 상품이 없습니다<br>트렌드 목록에서 + 버튼을 눌러<br>상품을 선별해보세요</p></div>`;
+    return;
+  }
+  const platL = { coupang:'쿠팡', naver:'네이버', instagram:'인스타그램' };
+  let html = `<div class="section-title">선별 상품 (${items.length}개)</div>`;
+  html += items.map(item => {
+    const safe = JSON.stringify(item).replace(/'/g,"&#39;");
+    return `<div class="selected-item">
+      <div class="item-emoji">${item.emoji}</div>
+      <div class="info">
+        <div class="name">${item.name}</div>
+        <div class="meta">${platL[item.platform]} · ${item.subCategory||item.category} · ${item.change}</div>
+        ${item.priceRange?`<div class="meta">💰 ${item.priceRange} · 👤 ${item.target||'-'}</div>`:''}
+        ${(item.keywords||[]).length?`<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px">${item.keywords.slice(0,3).map(k=>`<span style="font-size:10px;background:#F3F4F6;padding:2px 6px;border-radius:8px">#${k}</span>`).join('')}</div>`:''}
+        <div id="ra-${item.id}" class="ra-slot"></div>
+      </div>
+      <button class="remove-btn" onclick='toggleSelect(${JSON.stringify(item.id)},"${item.platform}",${safe})'>✕</button>
+    </div>`;
+  }).join('');
+  html += `<span class="note-label">📝 오늘의 MD 메모</span>`;
+  html += `<textarea class="note-area" id="selectionNote" placeholder="선별 이유, 발주 수량, 특이사항, 가격대 등...">${window._savedNote||''}</textarea>`;
+  html += `<div id="sheetsResult"></div>`;
+  body.innerHTML = html;
+  loadDrawerAnalyses();
+}
+
+// 선별 상품에 연결된 리뷰 분석을 드로어에 표시
+async function loadDrawerAnalyses() {
+  if (!sb) return;
+  const ids = Object.keys(selectedItems);
+  if (!ids.length) return;
+  try {
+    const { data } = await sb.from('review_analysis').select('item_id,pos_pct,neg_pct,insight').in('item_id', ids).order('created_at', { ascending: false });
+    if (!data) return;
+    const seen = {};
+    data.forEach(r => {
+      if (!r.item_id || seen[r.item_id]) return;
+      seen[r.item_id] = true;
+      const slot = document.getElementById('ra-' + r.item_id);
+      if (slot) slot.innerHTML = `<div class="ra-badge">📝 리뷰분석 · 😊${r.pos_pct}% 😟${r.neg_pct}%${r.insight ? ` · ${r.insight}` : ''}</div>`;
+    });
+  } catch (e) { /* 무시 */ }
+}
+
+async function clearSelected() {
+  const ids = Object.keys(selectedItems);
+  selectedItems = {};
+  document.getElementById('selectedCountBadge').textContent = 0;
+  document.getElementById('summarySelected').textContent = 0;
+  render(); renderDrawer(); showToast('선별 목록 초기화');
+  if (sb && ids.length) { try { await sb.from('selections').delete().in('item_id', ids); } catch(e){} }
+}
+
+function exportTxt() {
+  const items = Object.values(selectedItems);
+  if (items.length === 0) { showToast('선별된 상품이 없습니다'); return; }
+  const note = document.getElementById('selectionNote')?.value || '';
+  window._savedNote = note;
+  const platL = { coupang:'쿠팡', naver:'네이버', instagram:'인스타그램' };
+  const dateStr = new Date().toLocaleDateString('ko-KR');
+  const periodLabel = { daily:'일간', weekly:'주간', monthly:'월간', yearly:'연간' }[currentPeriod];
+  let text = `📋 감자마켓 상품 선별 목록\n📅 ${dateStr} | 기간: ${periodLabel}\n${'━'.repeat(30)}\n\n`;
+  items.forEach((item, i) => {
+    text += `${i+1}. ${item.name}\n   플랫폼: ${platL[item.platform]} | 카테고리: ${item.category}\n   트렌드: ${item.change} | 점수: ${item.score}\n   비고: ${item.note}\n\n`;
+  });
+  if (note) text += `${'━'.repeat(30)}\n📝 MD 메모:\n${note}\n`;
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `감자마켓_선별목록_${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  showToast('TXT 파일 내보내기 완료 📤');
+}
+
+async function saveToSheets() {
+  const items = Object.values(selectedItems);
+  if (items.length === 0) { showToast('선별된 상품이 없습니다'); return; }
+  const note = document.getElementById('selectionNote')?.value || '';
+  window._savedNote = note;
+  const platL = { coupang:'쿠팡', naver:'네이버', instagram:'인스타그램' };
+
+  const payload = {
+    date: new Date().toLocaleDateString('ko-KR'),
+    period: { daily:'일간', weekly:'주간', monthly:'월간', yearly:'연간' }[currentPeriod],
+    items: items.map(item => ({
+      name: item.name, platform: platL[item.platform], category: item.category,
+      trend: item.change, score: item.score, note: item.note
+    })),
+    mdNote: note
+  };
+
+  const btn = document.getElementById('sheetsBtn');
+  btn.disabled = true; btn.textContent = '저장 중...';
+  const resultEl = document.getElementById('sheetsResult');
+  try {
+    const res = await afetch('/api/sheets/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (data.success) {
+      if (resultEl) resultEl.innerHTML = `<div class="sheets-result success">✅ Google Sheets에 저장 완료!</div>`;
+      showToast('Google Sheets 저장 완료 📊');
+    } else {
+      throw new Error(data.message || 'Unknown error');
+    }
+  } catch(e) {
+    if (resultEl) resultEl.innerHTML = `<div class="sheets-result error">❌ 저장 실패: ${e.message}</div>`;
+    showToast('Sheets 저장 실패: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '📊 시트 저장';
+  }
+}
+
+// ===== SETUP MODAL =====
+function openSetupModal() { document.getElementById('setupModal').classList.remove('hidden'); }
+function closeSetupModal() { document.getElementById('setupModal').classList.add('hidden'); }
+document.getElementById('setupModal').addEventListener('click', e => { if (e.target === document.getElementById('setupModal')) closeSetupModal(); });
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window._tt);
+  window._tt = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ===== 일일 종합 보고서 =====
+// ===== 리뷰 분석기 (코드 기반 빈도분석, 무료·토큰0) =====
+function openReviewAnalyzer() { document.getElementById('reviewOverlay').classList.add('open'); fillRevLinkOptions(); }
+function closeReviewAnalyzer() { document.getElementById('reviewOverlay').classList.remove('open'); }
+
+const REV_POS = ['좋','만족','최고','가성비','저렴','싸','빠르','튼튼','편하','편리','부드','조용','가벼','예쁘','이쁘','깔끔','우수','추천','괜찮','강추','굿','훌륭','선명','넉넉','시원','마음에','대박','완벽','감동','짱','신세계','재구매'];
+const REV_NEG = ['별로','불만','아쉽','무겁','느리','약하','고장','불편','시끄','비싸','떨어','부족','최악','실망','안좋','깨','흠집','후회','짧','불량','냄새','늦','안되','문제','하자','불안','거슬','버벅','끊','환불','반품'];
+const REV_STOP = new Set(['그리고','근데','그런데','하지만','그냥','정말','너무','조금','약간','진짜','완전','계속','아주','매우','다시','이거','저거','그거','제품','상품','구매','구입','사용','배송','후기','리뷰','정도','생각','때문','이런','저런','부분','사진','이번','처음','이제','거의','및','등','중','구성','하나','사람','경우','우리']);
+const REV_LABEL = {좋:'좋음',만족:'만족',최고:'최고',가성비:'가성비',저렴:'저렴',싸:'저렴',빠르:'빠름',튼튼:'튼튼함',편하:'편함',편리:'편리',부드:'부드러움',조용:'조용함',가벼:'가벼움',예쁘:'예쁨',이쁘:'예쁨',깔끔:'깔끔함',추천:'추천',괜찮:'괜찮음',강추:'강력추천',선명:'선명함',넉넉:'넉넉함',시원:'시원함',완벽:'완벽함',감동:'감동',재구매:'재구매의사',별로:'별로',불만:'불만',아쉽:'아쉬움',무겁:'무거움',느리:'느림',약하:'약함',고장:'고장',불편:'불편',시끄:'시끄러움',비싸:'비쌈',떨어:'품질저하',부족:'부족함',최악:'최악',실망:'실망',깨:'파손',흠집:'흠집',후회:'후회',짧:'짧음',불량:'불량',냄새:'냄새',늦:'늦음',문제:'문제',하자:'하자',끊:'끊김',환불:'환불',반품:'반품'};
+
+function revTokenize(text) {
+  return text.split(/[\s,.!?~"'()\[\]·…\/\-\n]+/)
+    .map(w => w.replace(/(이|가|을|를|은|는|에|의|도|만|와|과|로|으로|에서|까지|부터|에게|네요|어요|아요|습니다|했어요|해요|예요|이에요)$/, ''))
+    .map(w => w.replace(/[^가-힣a-zA-Z0-9]/g, ''))
+    .filter(w => w.length >= 2 && !REV_STOP.has(w));
+}
+
+function analyzeReviews() {
+  const raw = (document.getElementById('revInput').value || '').trim();
+  const out = document.getElementById('revResult');
+  if (!raw) { out.innerHTML = '<div style="color:var(--sub);font-size:13px">리뷰를 먼저 붙여넣어 주세요.</div>'; return; }
+  let reviews = raw.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  if (reviews.length < 2) reviews = raw.split(/[.!?]\s+/).map(s => s.trim()).filter(Boolean);
+
+  const has = (text, stems) => stems.filter(st => text.includes(st));
+  let pos = 0, neg = 0;
+  const posFreq = {}, negFreq = {}, wordFreq = {};
+  reviews.forEach(r => {
+    const ph = has(r, REV_POS), nh = has(r, REV_NEG);
+    ph.forEach(s => posFreq[s] = (posFreq[s] || 0) + 1);
+    nh.forEach(s => negFreq[s] = (negFreq[s] || 0) + 1);
+    if (ph.length > nh.length) pos++; else if (nh.length > ph.length) neg++;
+    revTokenize(r).forEach(w => wordFreq[w] = (wordFreq[w] || 0) + 1);
+  });
+  const top = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n);
+  const total = reviews.length;
+  const posPct = Math.round(pos / total * 100), negPct = Math.round(neg / total * 100), neuPct = Math.max(0, 100 - posPct - negPct);
+  const chips = (arr, cls) => arr.length ? arr.map(([k, v]) => `<span class="rev-chip ${cls}">${REV_LABEL[k] || k} <b>${v}</b></span>`).join('') : '<span style="font-size:12px;color:var(--sub)">감지된 키워드 없음</span>';
+
+  let html = `<div class="rev-sum-bar"><div style="width:${posPct}%;background:#0F9D58"></div><div style="width:${neuPct}%;background:#D1D5DB"></div><div style="width:${negPct}%;background:#EF4444"></div></div>
+    <div class="rev-sum-leg"><span style="color:#0F9D58">😊 긍정 ${posPct}%</span><span style="color:#6B7280">😐 중립 ${neuPct}%</span><span style="color:#EF4444">😟 부정 ${negPct}%</span><span style="margin-left:auto;color:var(--sub)">총 ${total}건</span></div>`;
+  html += `<div class="rev-cols">
+    <div><div class="rev-h" style="color:#0F9D58">👍 좋아하는 점</div><div class="rev-chips">${chips(top(posFreq, 8), 'pos')}</div></div>
+    <div><div class="rev-h" style="color:#EF4444">👎 불만 요인</div><div class="rev-chips">${chips(top(negFreq, 8), 'neg')}</div></div>
+  </div>`;
+  const wc = top(wordFreq, 18); const maxW = wc.length ? wc[0][1] : 1;
+  html += `<div class="rev-h" style="margin-top:14px">☁️ 자주 나온 단어</div><div class="rev-cloud">${wc.map(([w, c]) => { const sz = 12 + Math.round(c / maxW * 11); return `<span style="font-size:${sz}px;opacity:${(0.55 + c / maxW * 0.45).toFixed(2)}">${w}</span>`; }).join('')}</div>`;
+
+  const tPos = top(posFreq, 1)[0], tNeg = top(negFreq, 1)[0];
+  const pL = tPos ? (REV_LABEL[tPos[0]] || tPos[0]) : '', nL = tNeg ? (REV_LABEL[tNeg[0]] || tNeg[0]) : '';
+  let insightText = '';
+  if (tPos || tNeg) {
+    insightText = (pL ? `고객은 ${pL}을(를) 가장 좋아함` : '')
+      + (nL ? `${pL ? ', ' : ''}${nL}이(가) 최대 불만 → 이걸 개선한 상품이 차별화 포인트` : '');
+    const insightHtml = (pL ? `고객은 <b>${pL}</b>을(를) 가장 좋아함` : '')
+      + (nL ? `${pL ? ', ' : ''}<b>${nL}</b>이(가) 최대 불만 → 이걸 개선한 상품이 <b>차별화 포인트</b>` : '');
+    html += `<div class="rev-insight">💡 <b>MD 인사이트</b>: ${insightHtml}</div>`;
+  }
+  out.innerHTML = html;
+
+  // 저장용 결과 보관
+  lastReviewAnalysis = {
+    product_name: (document.getElementById('revProduct').value || '').trim(),
+    pos_pct: posPct, neg_pct: negPct, total,
+    pos_keywords: top(posFreq, 8).map(([k, v]) => [REV_LABEL[k] || k, v]),
+    neg_keywords: top(negFreq, 8).map(([k, v]) => [REV_LABEL[k] || k, v]),
+    word_cloud: wc.map(([w, c]) => [w, c]),
+    insight: insightText,
+  };
+  document.getElementById('revSaveRow').style.display = sb ? 'flex' : 'none';
+  showToast(`리뷰 ${total}건 분석 완료 (무료) ✓`);
+}
+
+let lastReviewAnalysis = null;
+
+// 선별 상품 연결용 드롭다운 채우기
+function fillRevLinkOptions() {
+  const sel = document.getElementById('revLinkSel');
+  if (!sel) return;
+  const items = Object.values(selectedItems);
+  sel.innerHTML = `<option value="">선별 상품에 연결 안 함</option>` +
+    items.map(it => `<option value="${it.id}">${it.name}</option>`).join('');
+}
+
+async function saveReviewAnalysis(btn) {
+  if (!sb) { showToast('저장하려면 Supabase 연결이 필요합니다'); return; }
+  if (!lastReviewAnalysis) { showToast('먼저 분석을 실행하세요'); return; }
+  const linkId = document.getElementById('revLinkSel').value || null;
+  const linkName = linkId ? (selectedItems[linkId]?.name || '') : '';
+  const pname = lastReviewAnalysis.product_name || linkName || '(이름없음)';
+  if (btn) { btn.disabled = true; btn.textContent = '저장 중...'; }
+  try {
+    const { error } = await sb.from('review_analysis').insert({
+      product_name: pname, item_id: linkId,
+      pos_pct: lastReviewAnalysis.pos_pct, neg_pct: lastReviewAnalysis.neg_pct, total: lastReviewAnalysis.total,
+      pos_keywords: lastReviewAnalysis.pos_keywords, neg_keywords: lastReviewAnalysis.neg_keywords,
+      word_cloud: lastReviewAnalysis.word_cloud, insight: lastReviewAnalysis.insight,
+    });
+    if (error) throw error;
+    showToast(`"${pname}" 분석 저장됨 ✓${linkId ? ' (선별상품 연결)' : ''}`);
+  } catch (e) { showToast('저장 실패: ' + (e.message || e)); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '💾 저장'; } }
+}
+
+async function showReviewHistory() {
+  const out = document.getElementById('revResult');
+  if (!sb) { out.innerHTML = '<div style="color:var(--sub);font-size:13px">이력은 Supabase 연결 시 사용 가능합니다.</div>'; return; }
+  out.innerHTML = '<div style="color:var(--sub);font-size:13px">이력 불러오는 중...</div>';
+  try {
+    const { data, error } = await sb.from('review_analysis').select('*').order('created_at', { ascending: false }).limit(30);
+    if (error) throw error;
+    if (!data || !data.length) { out.innerHTML = '<div style="color:var(--sub);font-size:13px">저장된 분석 이력이 없습니다.</div>'; return; }
+    out.innerHTML = `<div class="rev-h">📚 분석 이력 (${data.length})</div>` + data.map(r => `
+      <div class="rev-hist">
+        <div style="display:flex;align-items:center;gap:8px">
+          <b style="flex:1">${r.product_name || '(이름없음)'}</b>
+          <span style="font-size:11px;color:#0F9D58">긍 ${r.pos_pct}%</span>
+          <span style="font-size:11px;color:#EF4444">부 ${r.neg_pct}%</span>
+          <span style="font-size:11px;color:var(--sub)">${new Date(r.created_at).toLocaleDateString('ko-KR')}</span>
+          <button class="remove-btn" onclick="delReviewHistory('${r.id}', this)">✕</button>
+        </div>
+        ${r.insight ? `<div style="font-size:12px;color:var(--sub);margin-top:4px">💡 ${r.insight}</div>` : ''}
+        <div class="rev-chips" style="margin-top:6px">${(r.pos_keywords||[]).slice(0,4).map(k=>`<span class="rev-chip pos">${k[0]} <b>${k[1]}</b></span>`).join('')}${(r.neg_keywords||[]).slice(0,4).map(k=>`<span class="rev-chip neg">${k[0]} <b>${k[1]}</b></span>`).join('')}</div>
+      </div>`).join('');
+  } catch (e) { out.innerHTML = `<div style="color:var(--sub);font-size:13px">불러오기 실패: ${e.message||e}</div>`; }
+}
+
+async function delReviewHistory(id, btn) {
+  if (!sb) return;
+  try { await sb.from('review_analysis').delete().eq('id', id); btn.closest('.rev-hist').remove(); showToast('삭제됨'); }
+  catch (e) { showToast('삭제 실패'); }
+}
+
+function openReport() {
+  document.getElementById('reportOverlay').classList.add('open');
+  loadReport();
+}
+function closeReport() { document.getElementById('reportOverlay').classList.remove('open'); }
+
+async function loadReport() {
+  const body = document.getElementById('reportBody');
+  body.innerHTML = `<div class="rep-loading">📑 보고서를 불러오는 중...</div>`;
+  if (!SUPA_OK) { body.innerHTML = `<div class="rep-loading">서버(Supabase) 연결이 필요합니다.</div>`; return; }
+  try {
+    const res = await afetch('/api/report/latest');
+    const json = await res.json();
+    if (json.success && json.data) { renderReport(json.data); }
+    else { body.innerHTML = `<div class="rep-loading">아직 생성된 보고서가 없습니다.<br><br><button class="btn-primary" style="flex:none" onclick="generateReport(this)">🔄 지금 첫 보고서 생성</button></div>`; }
+  } catch (e) { body.innerHTML = `<div class="rep-loading">불러오기 실패: ${e.message}</div>`; }
+}
+
+async function generateReport(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '생성 중... (10~20초)'; }
+  const body = document.getElementById('reportBody');
+  body.innerHTML = `<div class="rep-loading">📊 4개 채널을 종합 분석 중입니다... (10~20초)</div>`;
+  try {
+    const res = await afetch('/api/report/generate');
+    const json = await res.json();
+    if (json.success && json.data) { renderReport(json.data); showToast('보고서 생성 완료 ✓'); }
+    else { body.innerHTML = `<div class="rep-loading">생성 실패: ${json.message || json.error}</div>`; }
+  } catch (e) { body.innerHTML = `<div class="rep-loading">생성 실패: ${e.message}</div>`; }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '🔄 지금 새로 생성'; } }
+}
+
+function renderReport(r) {
+  document.getElementById('reportDate').textContent = `${r.date} 기준 · ${r.generatedAt ? new Date(r.generatedAt).toLocaleString('ko-KR') : ''} 생성`;
+  const body = document.getElementById('reportBody');
+  let html = '';
+
+  // 요약 한 줄
+  const topRise = (r.rising && r.rising[0]) ? r.rising[0] : null;
+  const topCat = (r.naver && r.naver[0]) ? r.naver[0] : null;
+  if (topCat) {
+    html += `<div class="rep-summary">📌 오늘 네이버에서 가장 활발한 분야는 <b>${topCat.name}</b>(지수 ${topCat.ratio})입니다.`
+      + (topRise ? ` 급상승 분야는 <b>${topRise.name}</b>(▲${topRise.change}%) — 관련 상품 발주를 검토해보세요.` : '') + `</div>`;
+  }
+
+  // 통합 핫 키워드
+  if (r.keywords && r.keywords.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">🔑 오늘의 핫 키워드</div><div class="rep-chips">${r.keywords.map(k=>`<span class="rep-chip" onclick="closeReport();searchKeyword('${k}')" style="cursor:pointer">#${k}</span>`).join('')}</div></div>`;
+  }
+
+  html += `<div class="rep-cols">`;
+  // 급상승 / 하락
+  html += `<div class="rep-sec"><div class="rep-sec-title">⬆️ 급상승 분야</div>`;
+  html += (r.rising && r.rising.length) ? r.rising.map((c,i)=>`<div class="rep-row"><div class="rr-rank ${i===0?'t':''}">${i+1}</div><div class="rr-name">${c.name}</div><div class="rr-val up">▲${c.change}%</div></div>`).join('') : `<div style="font-size:12px;color:var(--sub)">없음</div>`;
+  html += `</div>`;
+  html += `<div class="rep-sec"><div class="rep-sec-title">⬇️ 하락 분야</div>`;
+  html += (r.falling && r.falling.length) ? r.falling.map((c,i)=>`<div class="rep-row"><div class="rr-rank">${i+1}</div><div class="rr-name">${c.name}</div><div class="rr-val down">▼${Math.abs(c.change)}%</div></div>`).join('') : `<div style="font-size:12px;color:var(--sub)">없음</div>`;
+  html += `</div></div>`;
+
+  // 네이버 카테고리 트렌드 전체
+  if (r.naver && r.naver.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">🟢 네이버 카테고리 트렌드</div>`;
+    html += r.naver.map((c,i)=>`<div class="rep-row"><div class="rr-rank ${i<3?'t':''}">${i+1}</div><div class="rr-name">${c.name}</div><div class="rr-val ${c.trend}">${c.ratio}</div></div>`).join('');
+    html += `</div>`;
+  }
+
+  // 쿠팡 골드박스
+  if (r.coupang && r.coupang.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">🛒 쿠팡 골드박스 TOP</div>`;
+    html += r.coupang.map((p,i)=>`<div class="rep-row"><div class="rr-rank ${i<3?'t':''}">${i+1}</div><div class="rr-name">${p.name}</div><div class="rr-val">${p.priceText}</div></div>`).join('');
+    html += `</div>`;
+  }
+
+  // 인스타 해시태그
+  if (r.insta && r.insta.length) {
+    html += `<div class="rep-sec"><div class="rep-sec-title">📷 인스타 핫 해시태그</div>`;
+    html += r.insta.map((t,i)=>`<div class="rep-row"><div class="rr-rank ${i<3?'t':''}">${i+1}</div><div class="rr-name">${t.tag}</div><div class="rr-val">${(t.popularity).toLocaleString()}</div></div>`).join('');
+    html += `</div>`;
+  }
+
+  body.innerHTML = html || `<div class="rep-loading">표시할 데이터가 없습니다.</div>`;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PDT · Product Discovery Terminal</title>
+<style>
+  :root{
+    --bg:#F4F5F9; --panel:#FFFFFF; --line:#E9EBF2; --line2:#F1F3F8;
+    --text:#1E2433; --sub:#878DA0; --muted:#AEB4C4;
+    --primary:#4F46E5; --primary2:#6366F1; --primary-soft:#EEF0FF;
+    --green:#16A34A; --green-soft:#E7F7EE; --red:#EF4444; --red-soft:#FDECEC;
+    --amber:#F59E0B; --amber-soft:#FEF3C7; --purple:#7C3AED; --naver:#03C75A;
+    --teal:#0EA5A4; --teal-soft:#E6F7F6;
+    --shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.06);
+    --radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,-apple-system,sans-serif;
+    background:var(--bg); color:var(--text); font-size:13px; line-height:1.4;
+    -webkit-font-smoothing:antialiased;
+  }
+  .term{ min-width:340px; max-width:2200px; margin:0 auto; padding:0 16px 12px; }
+  .num{ font-variant-numeric:tabular-nums; }
+
+  /* ===== 헤더 ===== */
+  .hd{ display:flex; align-items:center; gap:18px; height:54px; }
+  .hd-logo{ display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  .hd-logo .mark{ width:38px; height:38px; border-radius:11px;
+    background:linear-gradient(135deg,var(--primary),var(--primary2));
+    color:#fff; font-weight:800; font-size:12px; letter-spacing:.5px;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(79,70,229,.35); }
+  .hd-logo .nm{ font-size:16px; font-weight:800; }
+  .hd-logo .sub{ font-size:10.5px; color:var(--sub); font-weight:600; }
+  .hd-search{ flex:1; max-width:560px; position:relative; }
+  .hd-search input{ width:100%; height:42px; border:1px solid var(--line); border-radius:11px;
+    padding:0 46px 0 16px; font-size:14px; background:var(--panel); color:var(--text); box-shadow:var(--shadow); }
+  .hd-search input:focus{ outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  .hd-search .sbtn{ position:absolute; right:6px; top:6px; width:30px; height:30px; border:none; border-radius:8px;
+    background:var(--primary); color:#fff; cursor:pointer; font-size:14px; }
+  .hd-right{ display:flex; align-items:center; gap:16px; flex-shrink:0; margin-left:auto; }
+  .hd-ic{ display:flex; flex-direction:column; align-items:center; gap:2px; font-size:10.5px; color:var(--sub); cursor:pointer; position:relative; }
+  .hd-ic .ico{ font-size:16px; }
+  .hd-ic:hover{ color:var(--primary); }
+  .hd-badge{ position:absolute; top:-5px; right:-8px; background:var(--red); color:#fff; font-size:9px; font-weight:800;
+    min-width:15px; height:15px; border-radius:99px; display:flex; align-items:center; justify-content:center; padding:0 3px; }
+  .hd-user{ display:flex; align-items:center; gap:8px; padding-left:14px; border-left:1px solid var(--line); cursor:pointer; }
+  .hd-user .av{ width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,#FDBA74,#FB923C);
+    display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .hd-user .un{ font-size:12.5px; font-weight:800; }
+  .hd-user .ur{ font-size:10.5px; color:var(--sub); }
+
+  /* ===== 영역 라벨 (① ② ③ …) ===== */
+  .area-tag{ display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:800;
+    color:var(--primary); background:var(--primary-soft); border-radius:8px; padding:3px 9px; }
+  .area-tag .cir{ width:15px; height:15px; border-radius:50%; background:var(--primary); color:#fff;
+    font-size:9px; display:flex; align-items:center; justify-content:center; }
+
+  /* ===== 그리드 ===== */
+  .grid{ display:grid; gap:8px; align-items:stretch;
+    grid-template-columns:206px 290px minmax(360px,1fr) 300px;
+    grid-template-areas:
+      "rail explore center ai"
+      "rail review  review action"; }
+  /* ③ AI(row1) 아래 ⑤ 액션(row2)이 붙도록 같은 col4. ①②③는 row1에서 동일 높이로 stretch */
+  .col-ai{ align-self:stretch; } .col-action{ align-self:start; }
+  .col-rail{ grid-area:rail; } .col-explore{ grid-area:explore; }
+  .col-center{ grid-area:center; } .col-ai{ grid-area:ai; }
+  .col-action{ grid-area:action; } .col-review{ grid-area:review; }
+
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
+  .card-h{ padding:9px 12px; border-bottom:1px solid var(--line2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card-t{ font-size:13px; font-weight:800; display:flex; align-items:center; gap:7px; }
+  .card-b{ padding:10px 12px; }
+
+  /* ===== 네비 레일 ===== */
+  .rail-sec{ padding:12px 12px; border-bottom:1px solid var(--line2); }
+  .rail-sec:last-child{ border-bottom:none; }
+  .rail-lbl{ font-size:10.5px; font-weight:800; color:var(--muted); letter-spacing:.4px; margin:0 4px 8px; }
+  .rail-item{ display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:9px; font-size:13px; font-weight:600;
+    color:var(--text); cursor:pointer; }
+  .rail-item .ic{ width:16px; text-align:center; }
+  .rail-item:hover{ background:var(--bg); }
+  .rail-item.on{ background:var(--primary-soft); color:var(--primary); font-weight:800; }
+  .rail-cat{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; font-size:12.5px; cursor:pointer; color:var(--text); }
+  .rail-cat:hover{ background:var(--bg); }
+  .rail-cat .chk{ width:15px; height:15px; border-radius:4px; border:1.5px solid var(--line); flex-shrink:0; }
+  .rail-cat.on .chk{ background:var(--primary); border-color:var(--primary); position:relative; }
+  .rail-cat.on .chk::after{ content:"✓"; color:#fff; font-size:10px; position:absolute; left:2px; top:-1px; }
+  .rail-cat.on{ font-weight:700; }
+  .rail-more{ font-size:11.5px; color:var(--primary); font-weight:700; padding:6px 8px; cursor:pointer; }
+  .sel{ width:100%; height:30px; border:1px solid var(--line); border-radius:8px; font-size:11.5px; color:var(--text);
+    padding:0 8px; background:var(--panel); margin-bottom:8px; }
+  .rk{ display:flex; align-items:center; gap:9px; padding:8px 7px; border-radius:8px; cursor:pointer; }
+  .rk:hover{ background:var(--bg); } .rk.on{ background:var(--primary-soft); }
+  .rk .rn{ width:17px; font-size:12px; font-weight:800; color:var(--sub); }
+  .rk.on .rn{ color:var(--primary); }
+  .rk .rnm{ flex:1; font-size:12.5px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rk .rsc{ font-size:11px; font-weight:800; color:#fff; background:var(--green); border-radius:6px; padding:1px 7px; }
+  .rk .rsc.b{ background:var(--primary); } .rk .rsc.c{ background:var(--amber); }
+
+  /* ===== ① 상품 탐색 ===== */
+  .pcard{ display:flex; gap:10px; padding:8px 9px; border:1px solid var(--line); border-radius:11px; margin-bottom:7px; cursor:pointer; transition:.12s; }
+  .pcard:hover{ border-color:var(--primary); box-shadow:0 4px 14px rgba(79,70,229,.10); }
+  .pcard.on{ border-color:var(--primary); background:var(--primary-soft); }
+  .pthumb{ width:46px; height:46px; border-radius:9px; background:linear-gradient(135deg,#EEF1FA,#E3E8F5);
+    flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:21px; }
+  .pbody{ flex:1; min-width:0; }
+  .prow1{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .pnm{ font-size:13px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pscore{ font-size:13px; font-weight:800; color:#fff; background:var(--primary); border-radius:7px; padding:2px 8px; flex-shrink:0; }
+  .pstar{ font-size:11px; color:var(--amber); font-weight:700; margin-top:3px; }
+  .pstar i{ color:var(--sub); font-weight:500; font-style:normal; }
+  .pmeta{ display:flex; gap:12px; margin-top:5px; font-size:10.5px; color:var(--sub); }
+  .pmeta b{ color:var(--text); font-weight:700; }
+  .pmeta .up{ color:var(--green); font-weight:800; }
+  #plist{ max-height:60vh; overflow-y:auto; }
+
+  /* ===== ② KPI ===== */
+  .kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
+  @media(max-width:1400px){ .kpis{ grid-template-columns:repeat(3,1fr); } }
+  .kpi{ border:1px solid var(--line); border-radius:11px; padding:9px 10px; }
+  .kpi .kl{ font-size:10.5px; color:var(--sub); font-weight:700; margin-bottom:5px; }
+  .kpi .kv{ font-size:20px; font-weight:800; line-height:1; }
+  .kpi .kv small{ font-size:11px; color:var(--muted); font-weight:700; }
+  .kpi .ks{ font-size:10px; color:var(--sub); margin-top:5px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+  .pill{ font-size:9.5px; font-weight:800; border-radius:6px; padding:1px 6px; }
+  .pill.g{ background:var(--green-soft); color:var(--green); }
+  .pill.a{ background:var(--amber-soft); color:#B45309; }
+  .pill.b{ background:var(--primary-soft); color:var(--primary); }
+  .kv.g{ color:var(--green); } .kv.b{ color:var(--primary); }
+  .ministars{ color:var(--amber); font-size:13px; letter-spacing:1px; }
+  .minibars{ display:flex; gap:3px; align-items:flex-end; height:24px; margin-top:2px; }
+  .minibars i{ width:6px; background:var(--primary); border-radius:2px; display:block; }
+
+  /* ===== ② 탭 + 차트 ===== */
+  .tabs{ display:flex; gap:4px; border-bottom:1px solid var(--line); margin:4px 0 0; }
+  .tab{ font-size:12px; font-weight:700; color:var(--sub); padding:8px 11px; cursor:pointer; border-bottom:2px solid transparent; }
+  .tab.on{ color:var(--primary); border-bottom-color:var(--primary); }
+  .charts{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; padding-top:10px; }
+  .chart h6{ font-size:11.5px; color:var(--sub); font-weight:700; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+  .seg{ display:flex; gap:2px; }
+  .seg span{ font-size:10px; font-weight:700; color:var(--sub); padding:2px 6px; border-radius:5px; cursor:pointer; }
+  .seg span.on{ background:var(--primary); color:#fff; }
+  /* 정사각형 플롯 */
+  .chart .plot{ width:100%; aspect-ratio:16/9; border:1px solid var(--line2); border-radius:10px; background:linear-gradient(180deg,#FCFCFE,#fff); }
+
+  /* 탭 본문(가격분석·경쟁비교 등) */
+  #tabBody{ padding-top:12px; }
+  .tabnote{ padding:20px 4px; font-size:12px; color:var(--sub); line-height:1.6; }
+  .pstats{ display:flex; gap:8px; margin:4px 0 12px; }
+  .pstat{ flex:1; border:1px solid var(--line); border-radius:10px; padding:9px 6px; text-align:center; }
+  .pstat .v{ font-size:15px; font-weight:800; } .pstat .l{ font-size:10px; color:var(--sub); margin-top:2px; }
+  .ctab{ width:100%; border-collapse:collapse; font-size:12px; }
+  .ctab th{ text-align:left; font-size:10.5px; color:var(--sub); font-weight:700; padding:6px 8px; border-bottom:1px solid var(--line); }
+  .ctab td{ padding:7px 8px; border-bottom:1px solid var(--line2); white-space:nowrap; }
+  .ctab td.nm{ white-space:normal; }
+  .ctab tr.on{ background:var(--primary-soft); }
+  .ctab tr{ cursor:pointer; } .ctab tbody tr:hover{ background:#FAFBFC; }
+  .ctab .sc{ font-weight:800; color:var(--primary); }
+  .ctab .up{ color:var(--green); font-weight:700; } .ctab .dn{ color:var(--red); font-weight:700; }
+  .chart .plot svg{ width:100%; height:100%; display:block; }
+  .axis{ display:flex; justify-content:space-between; font-size:9px; color:var(--muted); margin-top:4px; }
+  .titlerow{ display:flex; align-items:center; gap:10px; }
+  .titlerow .tt{ font-size:18px; font-weight:800; }
+  .star-add{ font-size:12px; color:var(--sub); font-weight:700; cursor:pointer; }
+  .seln{ font-size:11px; color:var(--sub); border:1px solid var(--line); border-radius:8px; padding:5px 9px; cursor:pointer; }
+
+  /* ===== ③ AI 리포트 ===== */
+  .ai-summary{ font-size:11px; line-height:1.4; color:var(--text); background:var(--bg); border-radius:8px; padding:6px 9px; }
+  .ai-h{ font-size:11px; font-weight:800; margin:6px 0 4px; display:flex; align-items:center; gap:6px; }
+  .ai-list{ list-style:none; display:flex; flex-direction:column; gap:3px; }
+  .ai-list li{ display:flex; align-items:center; gap:8px; font-size:11.5px; background:var(--bg); border-radius:7px; padding:4px 8px; }
+  .ai-list li .n{ width:16px; height:16px; border-radius:5px; font-size:9.5px; font-weight:800; color:#fff;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .ai-list.pos li .n{ background:var(--green); } .ai-list.neg li .n{ background:var(--red); }
+  .ai-list.act li{ background:var(--primary-soft); color:var(--primary); font-weight:700; }
+  .ai-list.act li .ck{ color:var(--primary); font-weight:900; }
+  .gauge{ text-align:center; padding:6px 10px 0; }
+  .gauge .gl{ font-size:10.5px; color:var(--sub); font-weight:800; }
+  .gauge .gv{ font-size:23px; font-weight:900; color:var(--primary); line-height:1.05; }
+  .gauge .gt{ display:inline-block; font-size:11px; font-weight:800; color:var(--green); background:var(--green-soft); border-radius:7px; padding:2px 9px; }
+  .gtrack{ height:8px; border-radius:99px; background:#EEF0F5; overflow:hidden; margin:9px 0 0; }
+  .gfill{ height:100%; border-radius:99px; background:linear-gradient(90deg,var(--primary2),var(--primary)); }
+
+  /* ===== ④ 리뷰/키워드 ===== */
+  .r4{ display:grid; grid-template-columns:repeat(4,1fr); gap:0; }
+  .r4 > div{ padding:11px 12px; border-right:1px solid var(--line2); }
+  .r4 > div:last-child{ border-right:none; }
+  @media(max-width:1180px){ .r4{ grid-template-columns:1fr 1fr; } }
+  .rtoggle{ display:flex; gap:5px; margin:6px 0 8px; }
+  .rtoggle button{ font-size:10.5px; font-weight:700; border:1px solid var(--line); background:var(--panel); color:var(--sub);
+    border-radius:6px; padding:4px 9px; cursor:pointer; }
+  .rtoggle button.on{ background:var(--green); color:#fff; border-color:var(--green); }
+  .rtoggle button.on.neg{ background:var(--red); border-color:var(--red); }
+  .bar{ margin-bottom:5px; }
+  .bar .bt{ display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; }
+  .bar .bt b{ font-weight:700; } .bar .bt span{ color:var(--sub); }
+  .btrack{ height:7px; border-radius:99px; background:#EEF0F5; overflow:hidden; }
+  .bfill{ height:100%; border-radius:99px; }
+  .cloud{ display:flex; flex-wrap:wrap; gap:4px 9px; align-items:center; padding:4px 0; line-height:1; }
+  .cloud span{ font-weight:800; cursor:default; }
+  .donut-row{ display:flex; align-items:center; gap:12px; }
+  .dleg{ font-size:11px; } .dleg div{ display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+  .dleg .d{ width:10px; height:10px; border-radius:3px; } .dleg b{ font-weight:800; } .dleg em{ color:var(--sub); font-style:normal; }
+
+  /* ===== ⑤ 액션 ===== */
+  .act-btn{ width:100%; display:flex; align-items:center; gap:10px; font-size:12.5px; font-weight:700; color:var(--text);
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 12px; margin-bottom:6px; cursor:pointer; transition:.12s; text-align:left; }
+  .act-btn:hover{ border-color:var(--primary); background:var(--primary-soft); }
+  .act-btn.primary{ background:var(--primary); color:#fff; border-color:var(--primary); }
+  .act-btn.primary:hover{ filter:brightness(1.06); }
+  .act-btn .ai-ico{ font-size:15px; }
+
+  /* ===== 플라이휠 ===== */
+  .fly{ margin-top:8px; }
+  .fly .card-b{ padding:8px 12px; }
+  .fly-h{ font-size:12px; font-weight:800; display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .fly-h .lp{ font-size:11px; font-weight:800; color:var(--primary); background:var(--primary-soft); border-radius:8px; padding:2px 9px; }
+  .fly-steps{ display:flex; align-items:flex-start; overflow-x:auto; }
+  .fly-s{ flex:1; min-width:96px; display:flex; align-items:flex-start; }
+  .fly-node{ flex:1; text-align:center; padding:0 4px; }
+  .fly-num{ width:26px; height:26px; margin:0 auto 6px; border-radius:50%; color:#fff; font-size:12px; font-weight:800;
+    display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,var(--primary),var(--primary2)); box-shadow:0 4px 10px rgba(79,70,229,.30); }
+  .fly-lb{ font-size:11.5px; font-weight:800; }
+  .fly-sb{ font-size:9.5px; color:var(--sub); margin-top:2px; line-height:1.25; }
+  .fly-ar{ color:var(--primary); font-size:15px; font-weight:800; margin-top:5px; flex-shrink:0; }
+  .fly-end{ font-size:10.5px; color:var(--sub); align-self:center; max-width:74px; line-height:1.3; text-align:center; }
+
+  .demo-note{ font-size:10px; color:var(--sub); text-align:center; padding:4px 0 0; }
+  .demo-note b{ color:var(--primary); }
+
+  /* ===== 반응형: 창 크기에 자동 대응 ===== */
+  /* 중간 폭: 4열 → 3열(① 위 / ② 아래 · ③ 위 / ⑤ 아래 · ④ 전체폭) */
+  @media (max-width:1320px){
+    .grid{ grid-template-columns:188px minmax(0,1fr) 284px;
+      grid-template-areas:
+        "rail explore ai"
+        "rail center  action"
+        "review review review"; }
+  }
+  /* 좁은 폭: 레일을 가로 메뉴처럼, 본문은 2열 */
+  @media (max-width:980px){
+    .grid{ grid-template-columns:1fr 1fr;
+      grid-template-areas:
+        "rail rail"
+        "explore ai"
+        "center center"
+        "action action"
+        "review review"; }
+    .col-rail .pdt-col-body, .col-rail{ }
+  }
+  /* 모바일: 전부 1열 적층 */
+  @media (max-width:680px){
+    .hd{ height:auto; flex-wrap:wrap; gap:10px; padding:8px 0; }
+    .hd-search{ order:3; max-width:none; flex-basis:100%; }
+    .hd-right{ gap:12px; }
+    .grid{ grid-template-columns:1fr;
+      grid-template-areas:"rail" "explore" "center" "ai" "action" "review"; }
+    .charts{ grid-template-columns:1fr 1fr; }
+    .kpis{ grid-template-columns:1fr 1fr !important; }
+    .r4{ grid-template-columns:1fr !important; }
+  }
+  @media (max-width:430px){ .charts{ grid-template-columns:1fr; } }
+
+  /* 리뷰 분석 모달 */
+  .ov{ position:fixed; inset:0; background:rgba(16,24,40,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .ov.on{ display:flex; }
+  .modal{ background:#fff; border-radius:16px; width:min(560px,100%); max-height:88vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal-h{ display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line); }
+  .modal-h b{ font-size:15px; } .modal-x{ cursor:pointer; font-size:18px; color:var(--sub); border:none; background:none; }
+  .modal-b{ padding:16px 18px; }
+  .modal-b label{ font-size:12px; font-weight:700; color:var(--sub); display:block; margin:0 0 5px; }
+  .modal-b input, .modal-b textarea{ width:100%; border:1px solid var(--line); border-radius:9px; padding:9px 11px; font-size:13px; font-family:inherit; margin-bottom:12px; }
+  .modal-b textarea{ min-height:160px; resize:vertical; }
+  .modal-b .hint{ font-size:11px; color:var(--sub); margin:-6px 0 12px; }
+  .modal-b .go{ width:100%; background:var(--primary); color:#fff; border:none; border-radius:10px; padding:12px; font-size:14px; font-weight:800; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="term">
+
+  <!-- ===== 헤더 ===== -->
+  <header class="hd">
+    <div class="hd-logo">
+      <div class="mark">PDT</div>
+      <div>
+        <div class="nm">Product Discovery Terminal</div>
+        <div class="sub">감자마켓 MD 상품 발굴 터미널</div>
+      </div>
+    </div>
+    <div class="hd-search">
+      <input id="q" type="text" value="캠핑 선풍기" placeholder="상품·키워드 검색 후 Enter" onkeydown="if(event.key==='Enter')doSearch()" />
+      <button class="sbtn" onclick="doSearch()">🔍</button>
+    </div>
+    <div class="hd-right">
+      <div class="hd-ic"><span class="ico">🕘</span>히스토리</div>
+      <div class="hd-ic"><span class="ico">🔔</span>알림<span class="hd-badge">12</span></div>
+      <div class="hd-ic" onclick="openWatch()"><span class="ico">⭐</span>관심상품</div>
+      <div class="hd-user">
+        <div class="av">👩</div>
+        <div><div class="un">MD 아영맘</div><div class="ur">감자마켓 MD님</div></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== 5분할 그리드 ===== -->
+  <div class="grid">
+
+    <!-- 좌측 네비 레일 -->
+    <aside class="col-rail card">
+      <div class="rail-sec">
+        <div class="rail-lbl">탐색</div>
+        <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
+        <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">🗂️</span> 카테고리 분석</div>
+        <div class="rail-item" onclick="navMenu(this,'trend')"><span class="ic">📈</span> 트렌드 리포트</div>
+        <div class="rail-item" onclick="navMenu(this,'watch')"><span class="ic">⭐</span> 관심 키워드 <span id="watchCnt" class="pill b" style="font-size:8px;margin-left:auto">0</span></div>
+        <div class="rail-item" onclick="navMenu(this,'compare')"><span class="ic">📊</span> 비교 분석</div>
+      </div>
+      <div class="rail-sec">
+        <div class="rail-lbl">카테고리 필터 <span style="font-weight:600;color:var(--muted)">· 클릭=분석</span></div>
+        <div id="railCats"></div>
+      </div>
+      <div class="rail-sec">
+        <div class="rail-lbl">상품 랭킹</div>
+        <select class="sel" onchange="sortProducts(this.value)">
+          <option value="score">정렬 · 기회 점수순</option>
+          <option value="plow">가격 낮은순</option>
+          <option value="phigh">가격 높은순</option>
+        </select>
+        <div id="rank"></div>
+      </div>
+    </aside>
+
+    <!-- ① 상품 탐색 -->
+    <section class="col-explore card">
+      <div class="card-h">
+        <span class="area-tag"><span class="cir">1</span> 상품 탐색 영역</span>
+      </div>
+      <div class="card-b">
+        <select class="sel"><option>경쟁 필터 · 1,250개 매물</option></select>
+        <div id="plist"></div>
+      </div>
+    </section>
+
+    <!-- ② 상품 분석 -->
+    <section class="col-center card">
+      <div class="card-h">
+        <span class="area-tag"><span class="cir">2</span> 상품 분석 영역</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="seln">데이터 기준 · 최근 6개월 ▾</span>
+          <span class="seln">📊 비교하기</span>
+        </div>
+      </div>
+      <div class="card-b">
+        <div class="titlerow" style="margin-bottom:14px">
+          <span class="tt" id="ptitle">캠핑 선풍기</span>
+          <span class="pill b" style="cursor:pointer" onclick="addWatch()">⭐ 관심 추가</span>
+          <span class="pill a" id="liveBadge">⚙️ 데모</span>
+        </div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <div class="tabs" id="tabs" style="margin-top:16px">
+          <div class="tab on" onclick="setTab('trend',this)">트렌드 차트</div>
+          <div class="tab" onclick="setTab('price',this)">가격 분석</div>
+          <div class="tab" onclick="setTab('compete',this)">경쟁 상품 비교</div>
+          <div class="tab" onclick="setTab('sales',this)">판매 추정</div>
+          <div class="tab" onclick="setTab('season',this)">시즌성 분석</div>
+        </div>
+
+        <div id="tabBody"></div>
+      </div>
+    </section>
+
+    <!-- ③ AI 분석 리포트 -->
+    <section class="col-ai card">
+      <div class="card-h">
+        <span class="area-tag"><span class="cir">3</span> AI 분석 리포트 영역</span>
+      </div>
+      <div class="card-b" id="aiReport"></div>
+    </section>
+
+    <!-- ⑤ 액션 -->
+    <aside class="col-action card">
+      <div class="card-h">
+        <span class="area-tag"><span class="cir">5</span> 액션 영역</span>
+      </div>
+      <div class="card-b">
+        <div class="card-t" style="margin-bottom:10px">다음 액션</div>
+        <button class="act-btn primary" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
+        <button class="act-btn" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
+        <button class="act-btn" onclick="addWatch()"><span class="ai-ico">🔔</span> 관심 상품 추가</button>
+        <button class="act-btn" onclick="openPlan()"><span class="ai-ico">📥</span> 리포트 다운로드</button>
+      </div>
+    </aside>
+
+    <!-- ④ 리뷰/키워드 분석 -->
+    <section class="col-review card">
+      <div class="card-h">
+        <span class="area-tag"><span class="cir">4</span> 리뷰/키워드 분석 영역 (하단)</span>
+        <button class="seln" onclick="openReview()">📝 리뷰 붙여넣고 분석</button>
+      </div>
+      <div class="r4">
+        <div>
+          <div class="card-t">리뷰 요약 분석 <span id="revCount" style="font-size:10.5px;font-weight:700"></span></div>
+          <div class="rtoggle"><button class="on" onclick="rtab(this,'pos')">긍정 키워드</button><button class="neg" onclick="rtab(this,'neg')">부정 키워드</button></div>
+          <div id="rpos"></div>
+          <div id="rneg" style="display:none"></div>
+        </div>
+        <div>
+          <div class="card-t">리뷰 키워드 워드클라우드</div>
+          <div class="cloud" id="revCloud"></div>
+        </div>
+        <div>
+          <div class="card-t">리뷰 감성 분석</div>
+          <div class="donut-row" style="margin-top:6px">
+            <div id="donut"></div>
+            <div class="dleg" id="dleg"></div>
+          </div>
+        </div>
+        <div>
+          <div class="card-t">가격대별 분포 <span id="priceTag" class="pill a" style="font-size:8px">데모</span></div>
+          <div id="priceDist" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ===== 플라이휠 Loop ===== -->
+  <section class="card fly">
+    <div class="card-b">
+      <div class="fly-h">🔄 MD 상품 발굴 플라이휠 <span class="lp">Loop</span></div>
+      <div class="fly-steps" id="fly"></div>
+    </div>
+  </section>
+
+  <div class="demo-note" id="demoNote">네이버 연결 상태를 확인하는 중…</div>
+</div>
+
+<!-- 리뷰 분석 모달 -->
+<div class="ov" id="revOv">
+  <div class="modal">
+    <div class="modal-h"><b>📝 리뷰 분석 (무료·LLM 미사용)</b><button class="modal-x" onclick="closeReview()">✕</button></div>
+    <div class="modal-b">
+      <label>상품명</label>
+      <input id="revProduct" type="text" placeholder="예: 캠핑 선풍기" />
+      <button class="seln" style="width:100%;text-align:center;margin:-4px 0 12px;padding:9px;border-color:var(--naver);color:#0a8a3f;font-weight:700" onclick="openNaverForReview()">🔗 네이버에서 이 상품 리뷰 페이지 열기 (새 탭)</button>
+      <label>리뷰 붙여넣기 (한 줄에 하나씩)</label>
+      <textarea id="revInput" placeholder="네이버·쿠팡 등에서 실제 리뷰를 복사해 붙여넣으세요. 한 줄에 한 리뷰.&#10;예) 저소음이라 좋아요&#10;배터리가 오래가서 만족&#10;무게가 좀 무거워요"></textarea>
+      <div class="hint">긍/부정 사전 + 단어 빈도로 분석합니다. 텍스트는 브라우저에서만 처리되고 전송되지 않습니다.</div>
+      <button class="go" onclick="runReview()">분석하기 →</button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script>
+// ===================== 네이버 실데이터 연동 =====================
+const CFG = window.GAMJA_CONFIG || {};
+const cfgOK = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && !/여기에/.test(CFG.SUPABASE_URL));
+const EDGE = CFG.EDGE_FUNCTION || 'market-api';
+const API  = cfgOK ? `${CFG.SUPABASE_URL}/functions/v1/${EDGE}` : '';
+function afetch(path){ const h={}; if(cfgOK){ h.apikey=CFG.SUPABASE_ANON_KEY; h.Authorization='Bearer '+CFG.SUPABASE_ANON_KEY; } return fetch(API+path,{headers:h}); }
+
+function hashStr(s){ let h=0; for(let i=0;i<(s||'').length;i++) h=(h*31+s.charCodeAt(i))|0; return Math.abs(h); }
+function demoMeta(name){ const h=hashStr(name); return { rating:(3.9+(h%11)/10).toFixed(1), reviews:300+(h%140)*90, growth:((h%46)-8) }; }
+function won(n){ return n>=10000 ? (Math.round(n/1000)/10)+'만원' : (n?n.toLocaleString()+'원':'-'); }
+function fmtK(n){ return n>=100000000?(n/100000000).toFixed(1)+'억':n>=10000?(Math.round(n/1000)/10)+'만':n>=1000?(n/1000).toFixed(1)+'천':String(n); }
+
+// 데모 시드(연결 전·실패 시)
+const DEMO_SEED = [
+  {name:'캠핑 선풍기',rating:'4.8',reviews:12345,price:42000,growth:32,score:89},
+  {name:'무선 캠핑 선풍기',rating:'4.7',reviews:8765,price:38000,growth:28,score:78},
+  {name:'캠핑 서큘레이터',rating:'4.8',reviews:6432,price:55000,growth:24,score:72},
+  {name:'휴대용 선풍기',rating:'4.5',reviews:4321,price:21000,growth:18,score:65},
+  {name:'접이식 캠핑 선풍기',rating:'4.4',reviews:3210,price:15000,growth:15,score:58},
+];
+const state = { query:'캠핑 선풍기', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false };
+const PLIST_MIN = 6;   // ① 기본 표시 개수(나머지는 '더 보기')
+
+// 검색어 → DataLab 7대 카테고리 매핑(카테고리 트렌드 실데이터 연결용)
+const CAT_MATCH = [
+  [/선풍기|이어폰|가전|충전|배터리|노트북|키보드|모니터|tv|스피커|청소기|드론|카메라/i,'디지털/가전'],
+  [/캠핑|등산|낚시|자전거|골프|러닝|요가|텐트|아웃도어|스포츠|레저/i,'스포츠/레저'],
+  [/원피스|셔츠|팬츠|신발|샌들|가방|패션|의류|코트|자켓/i,'패션의류'],
+  [/선크림|쿠션|세럼|클렌징|화장품|마스카라|립|스킨|토너|미용/i,'화장품/미용'],
+  [/수납|조명|러그|커튼|가구|인테리어|침대|소파|책상|선반/i,'가구/인테리어'],
+  [/이유식|기저귀|유아|아기|육아|분유|아동/i,'출산/육아'],
+  [/과일|간편식|간식|밀키트|식품|건강|영양제|커피|음료/i,'식품'],
+];
+function matchCat(q){ for(const [re,c] of CAT_MATCH) if(re.test(q)) return c; return '디지털/가전'; }
+
+// DataLab 카테고리 트렌드(월간 실데이터) 로드 → 검색량 추이에 사용
+async function loadTrend(){
+  if(!cfgOK){ state.catData=null; applyTrend(state.query); return; }
+  try{
+    const r=await afetch('/api/naver/categories?period=monthly'); const j=await r.json();
+    state.catData = (j && j.success && Array.isArray(j.data) && j.data.length) ? j.data : null;
+  }catch(e){ state.catData=null; }
+  await setTrendFor(state.query);   // 검색어 트렌드 우선, 없으면 카테고리 폴백
+}
+// 검색어(키워드) 트렌드 — Edge에 keywords 라우트 있으면 실데이터, 없으면 null(폴백)
+async function loadKwTrend(text){
+  if(!text) return null;
+  if(state.kwCache[text]!==undefined) return state.kwCache[text];
+  if(!cfgOK){ state.kwCache[text]=null; return null; }
+  try{
+    const cat=matchCat(text);
+    const r=await afetch(`/api/naver/keywords?q=${encodeURIComponent(text)}&cat=${encodeURIComponent(cat)}&period=monthly`);
+    // 검색어 DataLab은 희소할 때가 많음 → 5포인트 이상 풍부할 때만 사용, 아니면 카테고리 폴백
+    if(r.ok){ const j=await r.json(); if(j&&j.success&&Array.isArray(j.data)&&j.data.length>=5){ state.kwCache[text]=j.data; return j.data; } }
+  }catch(e){}
+  state.kwCache[text]=null; return null;
+}
+// 트렌드 설정: 검색어 단위 우선 → 실패 시 카테고리 매핑
+async function setTrendFor(text){
+  const kw=await loadKwTrend(text);
+  if(kw){ state.trend=kw; state.trendCat=text; state.trendKw=true; return; }
+  applyTrend(text); state.trendKw=false;
+}
+// 텍스트 → 7대 카테고리 매핑 → 카테고리 트렌드(폴백)
+function applyTrend(text){
+  state.trend=null; state.trendCat=null;
+  if(!state.catData) return;
+  const cat=matchCat(text||'');
+  const row=state.catData.find(d=>d.name===cat) || state.catData[0];
+  if(row && row.data && row.data.length){ state.trend=row.data; state.trendCat=row.name; }
+}
+function loadDemo(){ state.live=false; state.total=270000;
+  state.products=DEMO_SEED.map(d=>({...d,image:null,link:null,priceText:d.price.toLocaleString()+'원'})); state.selected=0; }
+
+// 매물수(경쟁) 기반 점수: 경쟁 낮을수록 + 상위노출일수록 ↑ (성장·평점 신호는 P2/DataLab 후 보강)
+function scoreOf(total, rank, price, med){
+  const comp = total ? Math.max(0, 100 - Math.min(62, Math.log10(total)*11.5)) : 55;
+  const rk = Math.max(0, 16 - rank*1.3);
+  let pr = 0;
+  if(price && med){ pr = price < med ? Math.min(10, (med-price)/med*20) : -Math.min(8, (price-med)/med*12); }
+  return Math.max(40, Math.min(97, Math.round(40 + comp*0.45 + rk + pr)));
+}
+function compLabel(t){ if(t==null)return['중간','a']; return t>200000?['높음','a']:t>60000?['중간','a']:['낮음','g']; }
+function sizeLabel(t){ if(t==null)return'중'; return t>150000?'대':t>40000?'중':'소'; }
+
+async function doSearch(){
+  const q=(document.getElementById('q').value||'').trim(); if(!q) return;
+  state.query=q;
+  if(!cfgOK){ loadDemo(); paint(); return; }
+  setLive('loading');
+  try{
+    const r=await afetch(`/api/naver/search?q=${encodeURIComponent(q)}&display=20&sort=sim`);
+    const j=await r.json();
+    if(j && j.success && Array.isArray(j.data) && j.data.length){
+      state.total=j.total;
+      const items=j.data.slice(0,30).map((it,i)=>{
+        const d=demoMeta(it.name);
+        return { name:it.name, image:it.image, price:it.price||it.priceLow||0,
+                 priceText:it.priceText, rating:d.rating, reviews:d.reviews, growth:d.growth,
+                 link:it.link, mall:it.mallName };
+      });
+      const ps=items.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
+      const med=ps.length?ps[Math.floor(ps.length/2)]:0;
+      items.forEach((it,i)=>{ it.score=scoreOf(j.total,i,it.price,med); });
+      state.products=items; state.med=med;
+      state.selected=0; state.showAll=false; state.live=true; setLive('ok');
+      await loadTrend();                         // 카테고리 DataLab 실트렌드
+    } else { loadDemo(); setLive('demo'); }
+  }catch(e){ loadDemo(); setLive('demo'); }
+  paint();
+}
+function setLive(s){
+  const b=document.getElementById('liveBadge'); if(b){
+    if(s==='ok'){ b.className='pill g'; b.textContent='🟢 네이버 실시간'; }
+    else if(s==='loading'){ b.className='pill a'; b.textContent='⏳ 불러오는 중'; }
+    else { b.className='pill a'; b.textContent='⚙️ 데모'; }
+  }
+  const note=document.getElementById('demoNote');
+  if(note){ note.innerHTML = s==='ok'
+    ? `🟢 <b>네이버 쇼핑 실시간</b> 연결됨 · 상품·가격·매물수는 실데이터, <b>평점·리뷰·추이 차트는 데모</b>(리뷰수집/DataLab 후 실데이터 예정)`
+    : `⚙️ <b>데모 데이터</b>로 표시 중 (네이버 연결 안 됨) — config.js의 Supabase 설정을 확인하세요`; }
+}
+
+// ── 렌더
+function paint(){ renderProducts(); renderRank(); renderKpis(); renderTitle(); renderTabBody(); renderPriceDist(); renderReview(); renderAIReport(); renderRailCats(); }
+
+// ── ② 탭: 트렌드/가격분석/경쟁비교/판매/시즌성
+function setTab(t, btn){
+  state.tab=t;
+  document.querySelectorAll('#tabs .tab').forEach(x=>x.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  renderTabBody();
+}
+function tabnote(s){ return `<div class="tabnote">${s}</div>`; }
+function trendChartsHTML(){
+  return `<div class="charts">
+    <div class="chart"><h6><span>검색량 추이 <span id="ch1tag" class="pill a" style="font-size:8px">데모</span></span> <span class="seg"><span>일</span><span>주</span><span class="on">월</span><span>년</span></span></h6><div id="ch1" class="plot"></div><div class="axis" id="ax1"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
+    <div class="chart"><h6>리뷰 수 추이 <span class="pill a" style="font-size:8px">데모</span></h6><div id="ch2" class="plot"></div><div class="axis" id="ax2"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
+    <div class="chart"><h6>판매 추정 추이 <span class="pill a" style="font-size:8px">데모</span></h6><div id="ch3" class="plot"></div><div class="axis" id="ax3"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
+  </div>`;
+}
+function priceAnalysisHTML(){
+  const prices=state.products.map(p=>p.price).filter(Boolean).sort((a,b)=>a-b);
+  if(!prices.length) return tabnote('가격 데이터가 없습니다. 검색해 주세요.');
+  const min=prices[0], max=prices[prices.length-1], med=prices[Math.floor(prices.length/2)];
+  const avg=Math.round(prices.reduce((a,b)=>a+b,0)/prices.length);
+  const sp=(state.products[state.selected]||{}).price||0;
+  const bk=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
+  const cnt=bk.map(b=>prices.filter(x=>x>=b[1]&&x<b[2]).length); const mx=Math.max(...cnt,1);
+  const bars=bk.map((b,i)=>{ const sel=sp>=b[1]&&sp<b[2]; return barRow(b[0]+(sel?' ◀ 선택':''), cnt[i], mx, sel?'var(--purple)':'var(--primary)'); }).join('');
+  const dv=med?Math.round((sp-med)/med*100):0;
+  return `<div class="pstats">
+      <div class="pstat"><div class="v">${won(min)}</div><div class="l">최저</div></div>
+      <div class="pstat"><div class="v">${won(med)}</div><div class="l">중앙값</div></div>
+      <div class="pstat"><div class="v">${won(avg)}</div><div class="l">평균</div></div>
+      <div class="pstat"><div class="v">${won(max)}</div><div class="l">최고</div></div>
+    </div>
+    <div class="card-t" style="margin:4px 0 8px">가격대 분포 <span class="pill g" style="font-size:8px">실시간 ${prices.length}개</span></div>
+    ${bars}
+    <div class="tabnote" style="padding:8px 0 0">선택 상품 <b>${won(sp)}</b> · 중앙값 대비 <b class="${dv>0?'up':'dn'}" style="color:${dv>0?'var(--red)':'var(--green)'}">${dv>0?'+':''}${dv}%</b> ${dv>10?'(고가)':dv<-10?'(저가·가성비)':'(중간)'}</div>`;
+}
+function compareHTML(){
+  const ps=state.products.slice(0, state.showAll?20:10);
+  if(!ps.length) return tabnote('비교할 상품이 없습니다.');
+  const med=state.med||0;
+  const rows=ps.map((p,i)=>{ const dv=med?Math.round((p.price-med)/med*100):0;
+    return `<tr class="${i===state.selected?'on':''}" onclick="selectProduct(${i})">
+      <td>${i+1}</td><td class="nm">${p.name.length>26?p.name.slice(0,26)+'…':p.name}</td>
+      <td>${won(p.price)}</td><td class="${dv>0?'dn':'up'}">${med?(dv>0?'+':'')+dv+'%':'-'}</td><td class="sc">${p.score}</td></tr>`;
+  }).join('');
+  return `<div class="card-t" style="margin:2px 0 8px">경쟁 상품 비교 <span class="pill g" style="font-size:8px">실시간 ${ps.length}개</span></div>
+    <table class="ctab"><thead><tr><th>#</th><th>상품</th><th>가격</th><th>중앙값대비</th><th>점수</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="tabnote" style="padding:8px 0 0">행을 누르면 해당 상품으로 분석이 전환됩니다.</div>`;
+}
+function renderTabBody(){
+  const el=document.getElementById('tabBody'); if(!el)return;
+  const t=state.tab||'trend';
+  if(t==='trend'){ el.innerHTML=trendChartsHTML(); renderCharts(); }
+  else if(t==='price'){ el.innerHTML=priceAnalysisHTML(); }
+  else if(t==='compete'){ el.innerHTML=compareHTML(); }
+  else if(t==='sales'){ el.innerHTML=tabnote('🛒 판매 추정은 네이버 무료 API에 원천이 없습니다. 매물수·가격·트렌드 기반 추정 모델은 다음 단계(성과 데이터 누적)에서 제공됩니다.'); }
+  else { el.innerHTML=tabnote('🗓️ 시즌성 분석은 연간 트렌드 누적 후 제공됩니다. 현재는 트렌드 차트 탭에서 최근 추이를 확인하세요.'); }
+}
+
+// ③ AI 리포트 — 선택 상품·가격·경쟁·트렌드 실데이터 기반 자동 생성(규칙기반·무료)
+function renderAIReport(){
+  const el=document.getElementById('aiReport'); if(!el)return;
+  const p=state.products[state.selected]||{};
+  // 트렌드 방향(카테고리 DataLab)
+  let dir='', trendTxt='추이 데이터 없음';
+  if(state.trend && state.trend.length>=2){
+    const i0=Math.max(0,state.trend.length-6);
+    const a=+state.trend[i0].ratio, b=+state.trend[state.trend.length-1].ratio;
+    const ch=a?Math.round((b-a)/a*100):0;
+    dir = ch>8?'상승':ch<-8?'하락':'보합';
+    trendTxt = `최근 6개월 검색 트렌드 ${dir}세(${ch>0?'+':''}${ch}%)`;
+  }
+  const [cl]=compLabel(state.total), sz=sizeLabel(state.total);
+  const prices=state.products.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
+  const med=prices.length?prices[Math.floor(prices.length/2)]:0;
+  // 선택 상품 가격 포지션(상품별 실데이터)
+  const sp=p.price||0; let posPct=0, posTxt='';
+  if(sp && med){ posPct=Math.round((sp-med)/med*100); posTxt = sp<med*0.9?'저가 포지션(가성비)':sp>med*1.1?'고가 포지션(프리미엄)':'중간 가격대'; }
+  const liveTag = state.live ? '<span class="pill g" style="font-size:8px">실데이터 기반</span>' : '<span class="pill a" style="font-size:8px">데모</span>';
+  const summary = `<b style="color:var(--primary)">시장 요약</b><br/>`+
+    `<b>${state.trendCat||'카테고리'}</b> 기준 ${trendTxt}, 네이버 매물 <b>${state.total!=null?fmtK(state.total):'-'}</b>개로 경쟁은 <b>${cl}</b>, 시장 규모 <b>${sz}</b>. `+
+    `가격대 중앙값 <b>${won(med)}</b>, 종합 기회점수 <b>${p.score??'-'}점</b>.`+
+    (sp?`<br/>· 선택 상품 <b>${won(sp)}</b>${med?` (중앙값 대비 ${posPct>0?'+':''}${posPct}%, ${posTxt})`:''}`:'');
+  // 인기/불만 — 리뷰 분석(④) 있을 때만 실데이터
+  let pop, neg;
+  if(state.review && !state.review.demo){
+    const li=(arr,col)=>arr.slice(0,3).map((k,i)=>`<li><span class="n">${i+1}</span> ${k[0]} <b style="margin-left:auto;color:${col}">${k[1]}건</b></li>`).join('');
+    pop=li(state.review.pos,'var(--green)')||'<li class="ai-muted">긍정 키워드 부족</li>';
+    neg=li(state.review.neg,'var(--red)')||'<li class="ai-muted">불만 키워드 부족</li>';
+  } else {
+    pop=neg=`<li style="background:#FAFBFC;color:var(--sub)">④ 📝 리뷰 분석 시 표시</li>`;
+  }
+  // 추천 전략(신호 기반)
+  const acts=[];
+  if(state.total>200000) acts.push('경쟁 과열 — 틈새 사양·가격대로 차별화');
+  else if(state.total!=null && state.total<60000) acts.push('경쟁 낮음 — 빠른 진입 검토');
+  if(dir==='상승') acts.push('성장세 — 지금 소싱 후보로 우선 검토');
+  else if(dir==='하락') acts.push('하락세 — 시즌/일시 요인 확인 후 신중');
+  if(prices.length){
+    const bk=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
+    const cnt=bk.map(b=>prices.filter(x=>x>=b[1]&&x<b[2]).length);
+    const gap=cnt.indexOf(Math.min(...cnt));
+    acts.push(`'${bk[gap][0]}' 구간 매물 적음 — 가격 빈틈 가능성`);
+  }
+  if(posTxt==='고가 포지션(프리미엄)') acts.push('이 상품 고가대 — 프리미엄 사양·브랜딩으로 차별화');
+  else if(posTxt==='저가 포지션(가성비)') acts.push('이 상품 저가대 — 가성비/물량 소구, 마진 관리 주의');
+  else if(posTxt) acts.push('이 상품 중간가 — 표준 사양 경쟁, 리뷰로 차별화');
+  if(state.review && !state.review.demo && state.review.neg[0]) acts.push(`최대 불만 '${state.review.neg[0][0]}' 개선형 기획`);
+  if(!acts.length) acts.push('신호가 더 모이면 전략을 제시합니다');
+  const actHtml=acts.slice(0,5).map(a=>`<li><span class="ck">✓</span> ${a}</li>`).join('');
+  // 게이지 — 종합 기회점수(성공확률 아님)
+  const score=p.score||0;
+  const tier=score>=75?['높음','var(--green)','var(--green-soft)']:score>=60?['관심','#B45309','var(--amber-soft)']:['보류','#6B7280','#F3F4F6'];
+  el.innerHTML=`
+    <div class="card-t" style="margin-bottom:10px">🤖 AI 분석 리포트 ${liveTag}</div>
+    <div class="ai-summary">${summary}</div>
+    <div class="ai-h">🔥 인기 요인 TOP 3</div><ul class="ai-list pos">${pop}</ul>
+    <div class="ai-h">⚠️ 주요 불만 요인 TOP 3</div><ul class="ai-list neg">${neg}</ul>
+    <div class="ai-h">✅ 추천 전략</div><ul class="ai-list act">${actHtml}</ul>
+    <div class="gauge">
+      <div class="gl">종합 기회 점수</div>
+      <div class="gv">${score}<span style="font-size:15px">점</span></div>
+      <div class="gtrack"><div class="gfill" style="width:${score}%"></div></div>
+      <div class="gt" style="margin-top:8px;color:${tier[1]};background:${tier[2]}">${tier[0]} 신호</div>
+      <div class="gl" style="margin-top:6px;font-weight:600;font-size:9px;color:var(--muted)">※ 성공확률 아닌 우선순위 점수 · 성과 누적 후 정밀화</div>
+    </div>`;
+}
+
+function renderProducts(){
+  const el=document.getElementById('plist'); if(!el)return;
+  const all=state.products, n=all.length;
+  const vis = state.showAll ? all : all.slice(0, PLIST_MIN);
+  let html=vis.map((p,i)=>{
+    const full=Math.round(parseFloat(p.rating));
+    const stars='★'.repeat(full)+'<i>'+'☆'.repeat(5-full)+'</i>';
+    const thumb=p.image?`<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;border-radius:9px" onerror="this.parentNode.textContent='🌀'">`:'🌀';
+    return `<div class="pcard ${i===state.selected?'on':''}" onclick="selectProduct(${i})">
+      <div class="pthumb">${thumb}</div>
+      <div class="pbody">
+        <div class="prow1"><div class="pnm">${i+1}. ${p.name}</div><div class="pscore">${p.score}점</div></div>
+        <div class="pstar" title="평점·리뷰는 데모값">${stars} ${p.rating} <i>(${Number(p.reviews).toLocaleString()})</i></div>
+        <div class="pmeta"><span>가격 <b>${p.priceText||won(p.price)}</b></span><span class="up">▲${p.growth}%</span></div>
+      </div>
+    </div>`;
+  }).join('');
+  if(n>PLIST_MIN){
+    html += `<button class="seln" style="width:100%;text-align:center;margin-top:4px" onclick="toggleAll()">${state.showAll?'접기 ▲':`더 보기 (+${n-PLIST_MIN}) ▼`}</button>`;
+  }
+  el.innerHTML=html;
+}
+function toggleAll(){ state.showAll=!state.showAll; renderProducts(); }
+function renderRank(){
+  const el=document.getElementById('rank'); if(!el)return;
+  el.innerHTML=state.products.slice(0,5).map((p,i)=>{
+    const cls=p.score>=80?'':p.score>=68?'b':'c';
+    return `<div class="rk ${i===state.selected?'on':''}" onclick="selectProduct(${i})"><span class="rn">${i+1}</span><span class="rnm">${p.name}</span><span class="rsc ${cls}">${p.score}</span></div>`;
+  }).join('');
+}
+function renderKpis(){
+  const el=document.getElementById('kpis'); if(!el)return;
+  const p=state.products[state.selected]||{};
+  const prices=state.products.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
+  const med=prices.length?prices[Math.floor(prices.length/2)]:0;
+  const [cl,cc]=compLabel(state.total);
+  const liveTag=state.live?'<span class="pill g">실시간</span>':'<span class="pill a">데모</span>';
+  const cards=[
+    ['🎯 기회 점수', (p.score??'–')+'<small> /100</small>', `<span class="pill ${p.score>=75?'g':'a'}">${p.score>=75?'높음':p.score>=60?'관심':'보류'}</span> 매물수 기준`, 'b'],
+    ['🛒 네이버 매물 수', state.total!=null?fmtK(state.total):'–', liveTag, ''],
+    ['💰 가격대(중앙값)', won(med), liveTag, ''],
+    ['⭐ 평균 평점', (p.rating??'–')+'<small> /5</small>', '<span class="pill a">데모</span>', ''],
+    ['⚔️ 경쟁 강도', cl, `<span class="pill ${cc}">${state.live?'매물수 기준':'데모'}</span>`, ''],
+    ['📦 시장 규모', sizeLabel(state.total), liveTag, ''],
+  ];
+  el.innerHTML=cards.map(c=>`<div class="kpi"><div class="kl">${c[0]}</div><div class="kv ${c[3]}">${c[1]}</div><div class="ks">${c[2]}</div></div>`).join('');
+}
+function renderTitle(){ const t=document.getElementById('ptitle'); if(t){ const p=state.products[state.selected]; t.textContent=p?p.name:state.query; } }
+function selectProduct(i){ state.selected=i; const p=state.products[i];
+  renderProducts(); renderRank(); renderKpis(); renderTitle(); renderTabBody(); renderAIReport();
+  if(p) setTrendFor(p.name).then(()=>{ renderTabBody(); renderAIReport(); });   // 상품별 검색어 트렌드
+}
+
+// ===================== 좌측 탐색 레일 동작 =====================
+const RAIL_CATS = [
+  ['🏕️ 캠핑/아웃도어','캠핑'], ['🌬️ 계절/냉방가전','선풍기'], ['🔌 디지털/가전','무선이어폰'],
+  ['👗 패션/뷰티','원피스'], ['🍎 식품/건강','간편식'], ['🛋️ 리빙/인테리어','수납장'], ['⛰️ 스포츠/레저','등산'],
+];
+function renderRailCats(){
+  const el=document.getElementById('railCats'); if(!el)return;
+  el.innerHTML=RAIL_CATS.map(c=>`<div class="rail-cat ${state.query===c[1]?'on':''}" onclick="railCat(this,'${c[1]}')"><span class="chk"></span> ${c[0]}</div>`).join('');
+}
+function railCat(el, kw){
+  document.querySelectorAll('#railCats .rail-cat').forEach(c=>c.classList.remove('on')); el.classList.add('on');
+  document.getElementById('q').value=kw; doSearch();
+}
+function navMenu(el, mode){
+  document.querySelectorAll('.rail-item').forEach(x=>x.classList.remove('on')); el.classList.add('on');
+  if(mode==='search'){ const q=document.getElementById('q'); q.focus(); q.select(); }
+  else if(mode==='category'){ document.getElementById('railCats').scrollIntoView({behavior:'smooth',block:'nearest'}); }
+  else if(mode==='trend'){ openTrendReport(); }
+  else if(mode==='watch'){ openWatch(); }
+  else if(mode==='compare'){ setTab('compete', document.querySelector('#tabs .tab:nth-child(3)')); document.getElementById('tabBody').scrollIntoView({behavior:'smooth',block:'center'}); }
+}
+function sortProducts(mode){
+  if(mode==='plow') state.products.sort((a,b)=>(a.price||1e12)-(b.price||1e12));
+  else if(mode==='phigh') state.products.sort((a,b)=>(b.price||0)-(a.price||0));
+  else state.products.sort((a,b)=>b.score-a.score);
+  state.selected=0; renderProducts(); renderRank(); renderTitle(); renderKpis(); renderTabBody(); renderAIReport();
+}
+
+// ── 관심(watchlist) · localStorage
+function getWatch(){ try{ return JSON.parse(localStorage.getItem('pdt_watch')||'[]'); }catch(e){ return []; } }
+function setWatch(a){ localStorage.setItem('pdt_watch', JSON.stringify(a)); updateWatchCnt(); }
+function updateWatchCnt(){ const el=document.getElementById('watchCnt'); if(el) el.textContent=getWatch().length; }
+function addWatch(){
+  const p=state.products[state.selected]; const name=p?p.name:state.query;
+  const w=getWatch(); if(w.find(x=>x.name===name)){ alert('이미 관심 목록에 있습니다'); return; }
+  w.unshift({ name, price:p?p.price:0, query:state.query, score:p?p.score:0, ts:Date.now() });
+  setWatch(w); alert('관심 목록에 추가했습니다 ⭐');
+}
+function removeWatch(name){ setWatch(getWatch().filter(x=>x.name!==name)); openWatch(); }
+function openWatch(){
+  const w=getWatch();
+  const esc=s=>s.replace(/'/g,'').replace(/"/g,'');
+  const body = w.length ? w.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line2)">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${x.name}</div><div style="font-size:11px;color:var(--sub)">${won(x.price)} · 점수 ${x.score}</div></div>
+      <button class="seln" onclick="document.getElementById('q').value='${esc(x.query)}';doSearch();closeModal('watchOv')">분석</button>
+      <button class="seln" style="color:var(--red);border-color:var(--red)" onclick="removeWatch('${esc(x.name)}')">삭제</button>
+    </div>`).join('') : '<div class="tabnote">아직 관심 상품이 없습니다. ②에서 ⭐ 관심 추가를 누르세요.</div>';
+  showModal('⭐ 관심 상품 · 키워드', body, 'watchOv');
+}
+function openTrendReport(){
+  let body;
+  if(state.catData && state.catData.length){
+    const kwOf={'디지털/가전':'무선이어폰','스포츠/레저':'캠핑','식품':'간편식','화장품/미용':'선크림','패션의류':'원피스','가구/인테리어':'수납장','출산/육아':'이유식'};
+    body = `<div class="tabnote" style="padding:0 0 8px">네이버 DataLab 카테고리 트렌드(월간) · 증감률 순 — 어느 분야부터 팔지 우선순위</div>`+
+      [...state.catData].sort((a,b)=>b.change-a.change).map(c=>{
+        const up=c.change>0, kw=kwOf[c.name]||c.name;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2)">
+          <div style="flex:1;font-weight:700;font-size:13px">${c.name}</div>
+          <div style="font-weight:800;color:${up?'var(--green)':'var(--red)'}">${up?'▲':'▼'} ${Math.abs(c.change)}%</div>
+          <button class="seln" onclick="document.getElementById('q').value='${kw}';doSearch();closeModal('trendOv')">분석 →</button>
+        </div>`;
+      }).join('');
+  } else body='<div class="tabnote">트렌드 데이터를 불러오지 못했습니다. 네이버 연결을 확인하세요.</div>';
+  showModal('📈 트렌드 리포트 · 지금 뜨는/지는 분야', body, 'trendOv');
+}
+// 공통 모달(동적 생성)
+function showModal(title, bodyHtml, id){
+  closeModal(id);
+  const ov=document.createElement('div'); ov.className='ov on'; ov.id=id;
+  ov.innerHTML=`<div class="modal"><div class="modal-h"><b>${title}</b><button class="modal-x" onclick="closeModal('${id}')">✕</button></div><div class="modal-b">${bodyHtml}</div></div>`;
+  ov.addEventListener('click',e=>{ if(e.target===ov) closeModal(id); });
+  document.body.appendChild(ov);
+}
+function closeModal(id){ const el=document.getElementById(id); if(el) el.remove(); }
+
+// ===================== ⑤ 상품 기획안 생성 (실데이터 기반·규칙기반) =====================
+function buildPlan(){
+  const p=state.products[state.selected]||{};
+  const name=p.name||state.query;
+  const prices=state.products.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
+  const min=prices[0]||0, max=prices[prices.length-1]||0;
+  const med=prices.length?prices[Math.floor(prices.length/2)]:0;
+  const avg=prices.length?Math.round(prices.reduce((a,b)=>a+b,0)/prices.length):0;
+  let dir='', trendTxt='추이 데이터 없음';
+  if(state.trend&&state.trend.length>=2){ const i0=Math.max(0,state.trend.length-6); const a=+state.trend[i0].ratio,b=+state.trend[state.trend.length-1].ratio; const ch=a?Math.round((b-a)/a*100):0; dir=ch>8?'상승':ch<-8?'하락':'보합'; trendTxt=`${state.trendCat||'카테고리'} ${dir}세 (${ch>0?'+':''}${ch}%)`; }
+  const [cl]=compLabel(state.total), sz=sizeLabel(state.total);
+  const bk=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
+  const cnt=bk.map(b=>prices.filter(x=>x>=b[1]&&x<b[2]).length);
+  const gap = prices.length? bk[cnt.indexOf(Math.min(...cnt))][0] : '-';
+  const hasRev=state.review&&!state.review.demo;
+  const diff = hasRev&&state.review.neg[0] ? `리뷰 최대 불만 '${state.review.neg[0][0]}' 개선형` : '경쟁 대비 사양·가격 차별화 (리뷰 분석 시 정밀화)';
+  const dv = med?Math.round((p.price-med)/med*100):0;
+  const top=state.products.slice(0,5).map((x,i)=>`  ${i+1}. ${x.name}  ·  ${won(x.price)}  ·  점수 ${x.score}`).join('\n');
+  const date=new Date().toLocaleDateString('ko-KR');
+  const text=
+`■ 상품 기획안 (초안)   |   ${date}
+대상: ${name}   ${state.live?'(네이버 실데이터 기반)':'(데모 데이터)'}
+
+[1] 시장 신호
+- 트렌드: ${trendTxt}
+- 경쟁: 네이버 매물 ${state.total!=null?fmtK(state.total):'-'}개 · 경쟁강도 ${cl} · 시장규모 ${sz}
+- 가격: 최저 ${won(min)} / 중앙값 ${won(med)} / 평균 ${won(avg)} / 최고 ${won(max)}
+- 종합 기회점수: ${p.score??'-'}점
+
+[2] 선택 상품 포지션
+- 가격 ${won(p.price||0)} (중앙값 대비 ${dv>0?'+':''}${dv}%, ${dv>10?'고가':dv<-10?'저가·가성비':'중간'})
+
+[3] 기획 방향
+- 권장 가격대: ${gap} 구간(매물 적은 빈틈) 또는 중앙값 ${won(med)} 근처
+- 차별화 포인트: ${diff}
+- 타깃: 해당 분야 관심 고객 ${hasRev?'(리뷰 기반 니즈 반영)':'(리뷰 수집 후 정밀화)'}
+- 상품명 후보: ${name} 프리미엄 / ${name} 실속형 / ${name} 2026
+
+[4] 경쟁 상품 TOP5
+${top}
+
+[5] 소싱 체크리스트
+[ ] 공급처 2~3곳 견적   [ ] 샘플 품질 확인   [ ] 마진 시뮬(목표 마진율)
+[ ] 상세페이지 핵심 문구   [ ] 초도 수량 결정
+
+※ 규칙기반 자동 초안입니다. AI 정밀 기획안은 키 연결 후(다음 단계) 제공됩니다.`;
+  const html=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;line-height:1.55;margin:0;color:var(--text)">${text.replace(/</g,'&lt;')}</pre>`;
+  return { name, text, html };
+}
+function openPlan(){
+  const pl=buildPlan(); window.__plan=pl;
+  const body=pl.html+`<div style="display:flex;gap:8px;margin-top:14px">
+      <button class="go" style="flex:1" onclick="copyPlan()">📋 복사</button>
+      <button class="go" style="flex:1;background:var(--green)" onclick="downloadPlan()">📥 다운로드(.txt)</button>
+    </div>`;
+  showModal('📝 상품 기획안 · '+pl.name, body, 'planOv');
+}
+function copyPlan(){ navigator.clipboard.writeText(window.__plan.text).then(()=>alert('기획안을 복사했습니다 📋')).catch(()=>alert('복사 실패 — 다운로드를 이용하세요')); }
+function downloadPlan(){
+  const pl=window.__plan; const blob=new Blob([pl.text],{type:'text/plain;charset=utf-8'});
+  const u=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=u; a.download=`기획안_${pl.name.replace(/[\\/:*?"<>|]/g,'').slice(0,30)}_${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
+}
+function searchSupplier(){
+  const p=state.products[state.selected]; const q=encodeURIComponent((p?p.name:state.query)+' 도매 공급처');
+  window.open('https://search.naver.com/search.naver?query='+q,'_blank','noopener');
+}
+
+// ── 라인 차트(스파크) 생성
+function spark(el, vals, color){
+  const node=document.getElementById(el); if(!node) return;   // 탭 전환 시 요소 없으면 무시
+  // 4:3 viewBox · preserveAspectRatio=none → 셀 크기에 비례해 늘어남(반응형)
+  const W=200, H=112, padX=14, padT=12, padB=12;
+  const min=Math.min(...vals), max=Math.max(...vals), rng=(max-min)||1;
+  const step=(W-padX*2)/(vals.length-1);
+  const pts=vals.map((v,i)=>[padX+i*step, (H-padB)-((v-min)/rng)*(H-padT-padB)]);
+  const line=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const area=`M${pts[0][0]} ${H-padB} `+pts.map(p=>'L'+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')+` L${pts[pts.length-1][0]} ${H-padB} Z`;
+  let grid=''; for(let g=0;g<4;g++){ const y=padT+g*((H-padT-padB)/3); grid+=`<line x1="${padX}" y1="${y.toFixed(1)}" x2="${W-padX}" y2="${y.toFixed(1)}" stroke="#EEF0F5" stroke-width="0.8" vector-effect="non-scaling-stroke"/>`; }
+  const lp=pts[pts.length-1];
+  document.getElementById(el).innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><linearGradient id="g_${el}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${color}" stop-opacity=".20"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}
+    <path d="${area}" fill="url(#g_${el})"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${lp[0].toFixed(1)}" cy="${lp[1].toFixed(1)}" r="3.4" fill="#fff" stroke="${color}" stroke-width="2.4" vector-effect="non-scaling-stroke"/>
+  </svg>`;
+}
+// 추이 차트: 검색량=카테고리 DataLab 실데이터, 리뷰/판매=데모(실원천 없음)
+function setAxis(id, pts){
+  const el=document.getElementById(id); if(!el)return;
+  el.innerHTML=pts.map(p=>{ const m=(p.period||'').slice(5,7); return `<span>${m?(+m)+'월':''}</span>`; }).join('');
+}
+function renderCharts(){
+  const tag=document.getElementById('ch1tag');
+  if(state.trend && state.trend.length>=2){
+    const pts=state.trend.slice(-6);
+    spark('ch1', pts.map(p=>+p.ratio), '#4F46E5');
+    setAxis('ax1', pts);
+    if(tag){ tag.className='pill g'; tag.style.fontSize='8px'; tag.textContent=(state.trendKw?'🔎검색어·':'분야·')+'DataLab '+(state.trendCat||''); }
+    // 리뷰/판매는 트렌드 모양을 따르되 데모(스케일만 다르게)
+    const base=pts.map(p=>+p.ratio);
+    spark('ch2', base.map((v,i)=>Math.round(v*120 + i*40)), '#16A34A');
+    spark('ch3', base.map((v,i)=>Math.round(v*0.9 + i*3)), '#7C3AED');
+    setAxis('ax2', pts); setAxis('ax3', pts);
+  } else {
+    if(tag){ tag.className='pill a'; tag.style.fontSize='8px'; tag.textContent='데모'; }
+    spark('ch1',[10000,13000,19000,30000,46000,58000],'#4F46E5');
+    spark('ch2',[3000,4100,5600,7200,9400,12000],'#16A34A');
+    spark('ch3',[10,14,19,26,33,40],'#7C3AED');
+  }
+}
+
+// ===================== ④ 리뷰/키워드 분석 (P2 · 무료·LLM 미사용) =====================
+const REV_POS = ['좋','만족','최고','가성비','저렴','싸','빠르','튼튼','편하','편리','부드','조용','가벼','예쁘','이쁘','깔끔','우수','추천','괜찮','강추','굿','훌륭','선명','넉넉','시원','마음에','대박','완벽','감동','짱','신세계','재구매'];
+const REV_NEG = ['별로','불만','아쉽','무겁','느리','약하','고장','불편','시끄','비싸','떨어','부족','최악','실망','안좋','깨','흠집','후회','짧','불량','냄새','늦','안되','문제','하자','불안','거슬','버벅','끊','환불','반품'];
+const REV_STOP = new Set(['그리고','근데','그런데','하지만','그냥','정말','너무','조금','약간','진짜','완전','계속','아주','매우','다시','이거','저거','그거','제품','상품','구매','구입','사용','배송','후기','리뷰','정도','생각','때문','이런','저런','부분','사진','이번','처음','이제','거의','및','등','중','구성','하나','사람','경우','우리']);
+const REV_LABEL = {좋:'좋음',만족:'만족',최고:'최고',가성비:'가성비',저렴:'저렴',싸:'저렴',빠르:'빠름',튼튼:'튼튼함',편하:'편함',편리:'편리',부드:'부드러움',조용:'조용함',가벼:'가벼움',예쁘:'예쁨',이쁘:'예쁨',깔끔:'깔끔함',추천:'추천',괜찮:'괜찮음',강추:'강력추천',선명:'선명함',넉넉:'넉넉함',시원:'시원함',완벽:'완벽함',감동:'감동',재구매:'재구매의사',별로:'별로',불만:'불만',아쉽:'아쉬움',무겁:'무거움',느리:'느림',약하:'약함',고장:'고장',불편:'불편',시끄:'시끄러움',비싸:'비쌈',떨어:'품질저하',부족:'부족함',최악:'최악',실망:'실망',깨:'파손',흠집:'흠집',후회:'후회',짧:'짧음',불량:'불량',냄새:'냄새',늦:'늦음',문제:'문제',하자:'하자',끊:'끊김',환불:'환불',반품:'반품'};
+function revTokenize(text){
+  return text.split(/[\s,.!?~"'()\[\]·…\/\-\n]+/)
+    .map(w=>w.replace(/(이|가|을|를|은|는|에|의|도|만|와|과|로|으로|에서|까지|부터|에게|네요|어요|아요|습니다|했어요|해요|예요|이에요)$/,''))
+    .map(w=>w.replace(/[^가-힣a-zA-Z0-9]/g,''))
+    .filter(w=>w.length>=2 && !REV_STOP.has(w));
+}
+
+// 데모 리뷰(분석 전 기본 표시)
+const DEMO_REVIEW = { demo:true, total:12345,
+  pos:[['저소음',285],['배터리 오래감',243],['바람 세기',187],['휴대성',121],['디자인',86]],
+  neg:[['무게',310],['충전 속도',264],['내구성',192],['소음(고속)',131],['가격',103]],
+  cloud:[['저소음',25],['배터리',23],['가벼움',18],['바람세기',14],['디자인',13],['휴대성',12],['조용함',10],['시원함',9]],
+  posPct:78, neuPct:16, negPct:6, insight:null };
+
+function curReview(){ return state.review || DEMO_REVIEW; }
+
+function barRow(label, num, max, color){
+  const w=Math.max(6, Math.round(num/max*100));
+  return `<div class="bar"><div class="bt"><b>${label}</b><span>${num}</span></div><div class="btrack"><div class="bfill" style="width:${w}%;background:${color}"></div></div></div>`;
+}
+function renderReview(){
+  const rv=curReview();
+  const cnt=document.getElementById('revCount');
+  if(cnt) cnt.innerHTML = rv.demo ? '<span class="pill a" style="font-size:8px">데모</span>' : `<span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건`;
+  const pmax=Math.max(...rv.pos.map(p=>p[1]),1), nmax=Math.max(...rv.neg.map(p=>p[1]),1);
+  const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=rv.pos.map(p=>barRow(p[0],p[1],pmax,'var(--green)')).join('')||'<div class="hint">긍정 키워드 없음</div>';
+  const rn=document.getElementById('rneg'); if(rn) rn.innerHTML=rv.neg.map(p=>barRow(p[0],p[1],nmax,'var(--red)')).join('')||'<div class="hint">부정 키워드 없음</div>';
+  // 워드클라우드
+  const cl=document.getElementById('revCloud');
+  if(cl){ const mx=Math.max(...rv.cloud.map(c=>c[1]),1); const cols=['var(--primary)','var(--purple)','var(--green)','var(--teal)','var(--amber)','var(--sub)'];
+    cl.innerHTML=rv.cloud.map((c,i)=>{ const sz=12+Math.round(c[1]/mx*16); return `<span style="font-size:${sz}px;color:${cols[i%cols.length]}">${c[0]}</span>`; }).join(''); }
+  drawDonut(rv.posPct, rv.neuPct, rv.negPct);
+  const dl=document.getElementById('dleg');
+  if(dl) dl.innerHTML=`<div><span class="d" style="background:var(--green)"></span> 긍정 <b>${rv.posPct}%</b></div>
+    <div><span class="d" style="background:#9CA3AF"></span> 중립 <b>${rv.neuPct}%</b></div>
+    <div><span class="d" style="background:var(--red)"></span> 부정 <b>${rv.negPct}%</b></div>`;
+}
+function drawDonut(pos,neu,neg){
+  const el=document.getElementById('donut'); if(!el)return;
+  const segs=[[pos,'#16A34A'],[neu,'#9CA3AF'],[neg,'#EF4444']];
+  const sz=78, r=sz/2-9, c=2*Math.PI*r, cx=sz/2; let off=0;
+  const arcs=segs.map(s=>{ const len=c*(s[0]||0)/100;
+    const a=`<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${s[1]}" stroke-width="15" stroke-dasharray="${len.toFixed(2)} ${(c-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})"/>`;
+    off+=len; return a; }).join('');
+  el.innerHTML=`<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}">${arcs}
+    <text x="${cx}" y="${cx-2}" text-anchor="middle" font-size="16" font-weight="800" fill="#16A34A">${pos}%</text>
+    <text x="${cx}" y="${cx+12}" text-anchor="middle" font-size="9" fill="#878DA0">긍정</text></svg>`;
+}
+
+// 가격대별 분포 — 실상품 가격(실데이터)로 집계
+function renderPriceDist(){
+  const el=document.getElementById('priceDist'); if(!el)return;
+  const tag=document.getElementById('priceTag');
+  const buckets=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
+  const prices=state.products.map(p=>p.price).filter(Boolean);
+  if(state.live && prices.length){
+    if(tag){tag.className='pill g';tag.style.fontSize='8px';tag.textContent='실시간';}
+    const counts=buckets.map(b=>prices.filter(p=>p>=b[1]&&p<b[2]).length);
+    const mx=Math.max(...counts,1);
+    el.innerHTML=buckets.map((b,i)=>barRow(b[0],counts[i],mx,'var(--primary)')).join('');
+  } else {
+    if(tag){tag.className='pill a';tag.style.fontSize='8px';tag.textContent='데모';}
+    const demo=[['~3만원',2],['3~5만원',5],['5~7만원',3],['7~10만원',1],['10만원~',1]]; const mx=5;
+    el.innerHTML=demo.map(d=>barRow(d[0],d[1],mx,'var(--primary)')).join('');
+  }
+}
+
+// 모달 + 실제 분석
+function openReview(){ const p=state.products[state.selected]; document.getElementById('revProduct').value=p?p.name:state.query; document.getElementById('revOv').classList.add('on'); }
+function openNaverForReview(){
+  const p=state.products[state.selected];
+  const url=(p&&p.link) ? p.link
+    : 'https://search.shopping.naver.com/search/all?query='+encodeURIComponent((document.getElementById('revProduct').value||state.query));
+  window.open(url,'_blank','noopener');
+}
+function closeReview(){ document.getElementById('revOv').classList.remove('on'); }
+function runReview(){
+  const raw=(document.getElementById('revInput').value||'').trim();
+  if(!raw){ alert('리뷰를 먼저 붙여넣어 주세요.'); return; }
+  let reviews=raw.split(/\n+/).map(s=>s.trim()).filter(Boolean);
+  if(reviews.length<2) reviews=raw.split(/[.!?]\s+/).map(s=>s.trim()).filter(Boolean);
+  const has=(t,arr)=>arr.filter(st=>t.includes(st));
+  let pos=0,neg=0; const pf={},nf={},wf={};
+  reviews.forEach(r=>{ const ph=has(r,REV_POS),nh=has(r,REV_NEG);
+    ph.forEach(s=>pf[s]=(pf[s]||0)+1); nh.forEach(s=>nf[s]=(nf[s]||0)+1);
+    if(ph.length>nh.length)pos++; else if(nh.length>ph.length)neg++;
+    revTokenize(r).forEach(w=>wf[w]=(wf[w]||0)+1); });
+  const top=(o,n)=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,n);
+  const total=reviews.length;
+  const posPct=Math.round(pos/total*100), negPct=Math.round(neg/total*100), neuPct=Math.max(0,100-posPct-negPct);
+  state.review={ demo:false, total, posPct, neuPct, negPct,
+    pos:top(pf,6).map(([k,v])=>[REV_LABEL[k]||k,v]),
+    neg:top(nf,6).map(([k,v])=>[REV_LABEL[k]||k,v]),
+    cloud:top(wf,10).map(([w,c])=>[w,c]),
+    product:(document.getElementById('revProduct').value||'').trim() };
+  closeReview(); renderReview();
+  // ③ AI 리포트 인기/불만요인에도 반영(3번에서 본격화)
+  if(typeof renderAIReport==='function') renderAIReport();
+}
+
+// ── 플라이휠
+const FLY=[
+  ['키워드 탐색','트렌드 키워드 발굴'],['시장 기회 발견','기회 점수로 우선순위 선정'],
+  ['경쟁 상품 분석','경쟁 현황 및 가격 분석'],['리뷰/불만 분석','고객 니즈 및 불만 파악'],
+  ['차별화 가설 생성','기획 아이디어 도출'],['소싱 및 상품 등록','상품 소싱 및 등록'],
+  ['성과 수집','판매 데이터 수집'],['예측 점수 보정','AI 모델 학습 및 개선'],
+];
+document.getElementById('fly').innerHTML=FLY.map((s,i)=>`
+  <div class="fly-s">
+    <div class="fly-node"><div class="fly-num">${i+1}</div><div class="fly-lb">${s[0]}</div><div class="fly-sb">${s[1]}</div></div>
+    <div class="fly-ar">→</div>
+  </div>`).join('') + `<div class="fly-end">더 정확한 키워드 발굴로 다시 1번으로</div>`;
+
+// ── 긍정/부정 토글
+function rtab(btn,which){
+  document.getElementById('rpos').style.display = which==='pos'?'':'none';
+  document.getElementById('rneg').style.display = which==='neg'?'':'none';
+  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+// ── 탭/세그 활성 토글(시각용)
+// 세그(일/주/월/년)는 탭 본문에서 동적 생성 → 위임 처리(시각용)
+document.addEventListener('click', e=>{
+  const sp=e.target.closest('.seg span'); if(!sp || sp.classList.contains('seg')) return;
+  sp.parentElement.querySelectorAll('span').forEach(t=>t.classList.remove('on')); sp.classList.add('on');
+});
+
+// ── 초기화: 네이버 상태 확인 후 기본 검색어로 실데이터 로드(실패 시 데모)
+(async function init(){
+  updateWatchCnt();
+  loadDemo(); paint();                         // 우선 데모로 즉시 그림
+  if(!cfgOK){ setLive('demo'); return; }
+  try{
+    const r=await afetch('/api/status'); const j=await r.json();
+    if(!j || !j.naverConfigured){ setLive('demo'); return; }
+  }catch(e){ setLive('demo'); return; }
+  doSearch();                                  // 네이버 연결됨 → 기본어 실데이터
+})();
+</script>
+</body>
+</html>
