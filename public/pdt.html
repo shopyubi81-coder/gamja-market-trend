@@ -186,7 +186,7 @@
 
   /* ===== ④ 리뷰/키워드 ===== */
   .r4{ display:grid; grid-template-columns:repeat(4,1fr); gap:0; }
-  .r4 > div{ padding:11px 12px; border-right:1px solid var(--line2); }
+  .r4 > div{ padding:11px 12px; border-right:1px solid var(--line2); display:flex; flex-direction:column; }
   .r4 > div:last-child{ border-right:none; }
   @media(max-width:1180px){ .r4{ grid-template-columns:1fr 1fr; } }
   .rtoggle{ display:flex; gap:5px; margin:6px 0 8px; }
@@ -194,16 +194,19 @@
     border-radius:6px; padding:4px 9px; cursor:pointer; }
   .rtoggle button.on{ background:var(--green); color:#fff; border-color:var(--green); }
   .rtoggle button.on.neg{ background:var(--red); border-color:var(--red); }
-  .bar{ margin-bottom:5px; }
-  .bar .bt{ display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; }
-  .bar .bt b{ font-weight:700; } .bar .bt span{ color:var(--sub); }
-  .btrack{ height:7px; border-radius:99px; background:#EEF0F5; overflow:hidden; }
-  .bfill{ height:100%; border-radius:99px; }
-  .cloud{ display:flex; flex-wrap:wrap; gap:4px 9px; align-items:center; padding:4px 0; line-height:1; }
+  .bar{ margin-bottom:9px; }
+  .bar .bt{ display:flex; justify-content:space-between; font-size:11.5px; margin-bottom:4px; }
+  .bar .bt b{ font-weight:700; } .bar .bt span{ color:var(--sub); font-weight:700; }
+  .btrack{ height:13px; border-radius:8px; background:#EEF0F5; overflow:hidden; }
+  .bfill{ height:100%; border-radius:8px; min-width:4px; }
+  /* ② 가격분석: 막대를 너무 길지 않게(짧고 굵게) */
+  .pbars{ max-width:620px; }
+  .cloud{ flex:1; display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; align-content:center; justify-content:center; padding:6px 4px; line-height:1.05; min-height:130px; }
   .cloud span{ font-weight:800; cursor:default; }
-  .donut-row{ display:flex; align-items:center; gap:12px; }
-  .dleg{ font-size:11px; } .dleg div{ display:flex; align-items:center; gap:6px; margin-bottom:5px; }
-  .dleg .d{ width:10px; height:10px; border-radius:3px; } .dleg b{ font-weight:800; } .dleg em{ color:var(--sub); font-style:normal; }
+  .donut-row{ flex:1; display:flex; align-items:center; justify-content:center; gap:20px; min-height:150px; }
+  .dleg{ font-size:13.5px; } .dleg div{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .dleg b{ font-size:15px; } .dleg em{ font-size:11px; }
+  .dleg .d{ width:13px; height:13px; border-radius:4px; flex-shrink:0; } .dleg b{ font-weight:800; } .dleg em{ color:var(--sub); font-style:normal; }
 
   /* ===== ⑤ 액션 ===== */
   .act-btn{ width:100%; display:flex; align-items:center; gap:10px; font-size:12.5px; font-weight:700; color:var(--text);
@@ -313,8 +316,7 @@
       <div class="rail-sec">
         <div class="rail-lbl">탐색</div>
         <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
-        <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">🗂️</span> 카테고리 분석</div>
-        <div class="rail-item" onclick="navMenu(this,'trend')"><span class="ic">📈</span> 트렌드 리포트</div>
+        <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">📈</span> 분야 분석·트렌드</div>
         <div class="rail-item" onclick="navMenu(this,'watch')"><span class="ic">⭐</span> 관심 키워드 <span id="watchCnt" class="pill b" style="font-size:8px;margin-left:auto">0</span></div>
         <div class="rail-item" onclick="navMenu(this,'compare')"><span class="ic">📊</span> 비교 분석</div>
       </div>
@@ -615,7 +617,7 @@ function priceAnalysisHTML(){
       <div class="pstat"><div class="v">${won(max)}</div><div class="l">최고</div></div>
     </div>
     <div class="card-t" style="margin:4px 0 8px">가격대 분포 <span class="pill g" style="font-size:8px">실시간 ${prices.length}개</span></div>
-    ${bars}
+    <div class="pbars">${bars}</div>
     <div class="tabnote" style="padding:8px 0 0">선택 상품 <b>${won(sp)}</b> · 중앙값 대비 <b class="${dv>0?'up':'dn'}" style="color:${dv>0?'var(--red)':'var(--green)'}">${dv>0?'+':''}${dv}%</b> ${dv>10?'(고가)':dv<-10?'(저가·가성비)':'(중간)'}</div>`;
 }
 function compareHTML(){
@@ -779,8 +781,7 @@ function railCat(el, kw){
 function navMenu(el, mode){
   document.querySelectorAll('.rail-item').forEach(x=>x.classList.remove('on')); el.classList.add('on');
   if(mode==='search'){ const q=document.getElementById('q'); q.focus(); q.select(); }
-  else if(mode==='category'){ document.getElementById('railCats').scrollIntoView({behavior:'smooth',block:'nearest'}); }
-  else if(mode==='trend'){ openTrendReport(); }
+  else if(mode==='category'){ openCategoryOverview(); }
   else if(mode==='watch'){ openWatch(); }
   else if(mode==='compare'){ setTab('compete', document.querySelector('#tabs .tab:nth-child(3)')); document.getElementById('tabBody').scrollIntoView({behavior:'smooth',block:'center'}); }
 }
@@ -812,22 +813,35 @@ function openWatch(){
     </div>`).join('') : '<div class="tabnote">아직 관심 상품이 없습니다. ②에서 ⭐ 관심 추가를 누르세요.</div>';
   showModal('⭐ 관심 상품 · 키워드', body, 'watchOv');
 }
-function openTrendReport(){
-  let body;
-  if(state.catData && state.catData.length){
-    const kwOf={'디지털/가전':'무선이어폰','스포츠/레저':'캠핑','식품':'간편식','화장품/미용':'선크림','패션의류':'원피스','가구/인테리어':'수납장','출산/육아':'이유식'};
-    body = `<div class="tabnote" style="padding:0 0 8px">네이버 DataLab 카테고리 트렌드(월간) · 증감률 순 — 어느 분야부터 팔지 우선순위</div>`+
-      [...state.catData].sort((a,b)=>b.change-a.change).map(c=>{
-        const up=c.change>0, kw=kwOf[c.name]||c.name;
-        return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2)">
-          <div style="flex:1;font-weight:700;font-size:13px">${c.name}</div>
-          <div style="font-weight:800;color:${up?'var(--green)':'var(--red)'}">${up?'▲':'▼'} ${Math.abs(c.change)}%</div>
-          <button class="seln" onclick="document.getElementById('q').value='${kw}';doSearch();closeModal('trendOv')">분석 →</button>
-        </div>`;
-      }).join('');
-  } else body='<div class="tabnote">트렌드 데이터를 불러오지 못했습니다. 네이버 연결을 확인하세요.</div>';
-  showModal('📈 트렌드 리포트 · 지금 뜨는/지는 분야', body, 'trendOv');
+// 카테고리 분석 = 분야 비교 개요(7대 분야 트렌드·가격대·신호 한눈에)
+const CAT_REPKW={'디지털/가전':'무선이어폰','스포츠/레저':'캠핑','식품':'간편식','화장품/미용':'선크림','패션의류':'원피스','가구/인테리어':'수납장','출산/육아':'이유식'};
+async function openCategoryOverview(){
+  if(!state.catData && cfgOK){ try{ const r=await afetch('/api/naver/categories?period=monthly'); const j=await r.json(); if(j&&j.success) state.catData=j.data; }catch(e){} }
+  const cats = state.catData ? [...state.catData].sort((a,b)=>b.change-a.change) : [];
+  if(!cats.length){ showModal('🗂️ 분야 비교 개요', '<div class="tabnote">분야 데이터를 불러오지 못했습니다. 네이버 연결을 확인하세요.</div>', 'catOv'); return; }
+  const sig=ch=> ch>5?['🟢 기회','var(--green)'] : ch<-5?['🔴 신중','var(--red)'] : ['⚪ 관망','var(--sub)'];
+  const rows=cats.map((c,i)=>{ const kw=CAT_REPKW[c.name]||c.name; const s=sig(c.change);
+    return `<tr>
+      <td class="nm" style="font-weight:700">${c.name}</td>
+      <td>지수 ${c.ratio}</td>
+      <td class="${c.change>0?'up':'dn'}">${c.change>0?'▲':'▼'} ${Math.abs(c.change)}%</td>
+      <td><span id="cp_${i}" style="color:var(--sub)">…</span></td>
+      <td style="color:${s[1]};font-weight:700">${s[0]}</td>
+      <td><button class="seln" onclick="document.getElementById('q').value='${kw}';doSearch();closeModal('catOv')">분석 →</button></td>
+    </tr>`;
+  }).join('');
+  showModal('📈 분야 분석·트렌드 · 지금 뜨는/지는 분야', `<div class="tabnote" style="padding:0 0 8px">네이버 DataLab 7대 분야 · 증감률 순 — 오늘 어느 분야를 팔지 한눈에 (트렌드+가격대+신호)</div>
+    <table class="ctab"><thead><tr><th>분야</th><th>검색지수</th><th>트렌드</th><th>대표 가격대</th><th>신호</th><th></th></tr></thead><tbody>${rows}</tbody></table>`, 'catOv');
+  // 대표 가격대 lazy 채우기(병렬) — 각 분야 대표 키워드 검색 중앙값
+  if(cfgOK) cats.forEach((c,i)=>{ const kw=CAT_REPKW[c.name]||c.name;
+    afetch(`/api/naver/search?q=${encodeURIComponent(kw)}&display=10`).then(r=>r.json()).then(j=>{
+      const el=document.getElementById('cp_'+i); if(!el)return;
+      if(j&&j.success&&j.data&&j.data.length){ const ps=j.data.map(x=>x.price||x.priceLow||0).filter(Boolean).sort((a,b)=>a-b); const med=ps[Math.floor(ps.length/2)]||0; el.textContent=med?won(med):'-'; el.style.color='var(--text)'; }
+      else el.textContent='-';
+    }).catch(()=>{ const el=document.getElementById('cp_'+i); if(el)el.textContent='-'; });
+  });
 }
+
 // 공통 모달(동적 생성)
 function showModal(title, bodyHtml, id){
   closeModal(id);
@@ -989,7 +1003,7 @@ function renderReview(){
   // 워드클라우드
   const cl=document.getElementById('revCloud');
   if(cl){ const mx=Math.max(...rv.cloud.map(c=>c[1]),1); const cols=['var(--primary)','var(--purple)','var(--green)','var(--teal)','var(--amber)','var(--sub)'];
-    cl.innerHTML=rv.cloud.map((c,i)=>{ const sz=12+Math.round(c[1]/mx*16); return `<span style="font-size:${sz}px;color:${cols[i%cols.length]}">${c[0]}</span>`; }).join(''); }
+    cl.innerHTML=rv.cloud.map((c,i)=>{ const sz=15+Math.round(c[1]/mx*23); return `<span style="font-size:${sz}px;font-weight:800;color:${cols[i%cols.length]}">${c[0]}</span>`; }).join(''); }
   drawDonut(rv.posPct, rv.neuPct, rv.negPct);
   const dl=document.getElementById('dleg');
   if(dl) dl.innerHTML=`<div><span class="d" style="background:var(--green)"></span> 긍정 <b>${rv.posPct}%</b></div>
@@ -999,13 +1013,13 @@ function renderReview(){
 function drawDonut(pos,neu,neg){
   const el=document.getElementById('donut'); if(!el)return;
   const segs=[[pos,'#16A34A'],[neu,'#9CA3AF'],[neg,'#EF4444']];
-  const sz=78, r=sz/2-9, c=2*Math.PI*r, cx=sz/2; let off=0;
+  const sz=128, r=sz/2-14, c=2*Math.PI*r, cx=sz/2; let off=0;
   const arcs=segs.map(s=>{ const len=c*(s[0]||0)/100;
-    const a=`<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${s[1]}" stroke-width="15" stroke-dasharray="${len.toFixed(2)} ${(c-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})"/>`;
+    const a=`<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${s[1]}" stroke-width="21" stroke-dasharray="${len.toFixed(2)} ${(c-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cx})"/>`;
     off+=len; return a; }).join('');
-  el.innerHTML=`<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}">${arcs}
-    <text x="${cx}" y="${cx-2}" text-anchor="middle" font-size="16" font-weight="800" fill="#16A34A">${pos}%</text>
-    <text x="${cx}" y="${cx+12}" text-anchor="middle" font-size="9" fill="#878DA0">긍정</text></svg>`;
+  el.innerHTML=`<svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}" style="flex-shrink:0">${arcs}
+    <text x="${cx}" y="${cx-1}" text-anchor="middle" font-size="26" font-weight="800" fill="#16A34A">${pos}%</text>
+    <text x="${cx}" y="${cx+17}" text-anchor="middle" font-size="12" fill="#878DA0">긍정</text></svg>`;
 }
 
 // 가격대별 분포 — 실상품 가격(실데이터)로 집계
