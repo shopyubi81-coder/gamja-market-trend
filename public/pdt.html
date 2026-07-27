@@ -538,6 +538,56 @@ function applyTrend(text){
   const row=state.catData.find(d=>d.name===cat) || state.catData[0];
   if(row && row.data && row.data.length){ state.trend=row.data; state.trendCat=row.name; }
 }
+// ── 진행 중(부분 집계) 구간 제거 ─────────────────────────────────────
+// DataLab은 '이번 달/이번 주/오늘'처럼 아직 집계 중인 구간도 함께 내려준다.
+// 이걸 완결 구간과 그대로 비교하면 전 분야가 일제히 하락으로 보이는 착시가 생긴다.
+// (실제로 7/28 시점에 7개 분야가 전부 -10%대로 찍혀 트렌드 축이 무의미해졌었음)
+function periodKeyOf(d, unit){ const s=String(d); return unit==='monthly' ? s.slice(0,7) : s.slice(0,10); }
+function trimPartial(series, unit){
+  if(!Array.isArray(series)||series.length<2) return series||[];
+  const u=unit||state.period||'monthly';
+  const now=new Date();
+  const lk=periodKeyOf(series[series.length-1].period, u);
+  if(u==='monthly'){
+    if(lk === now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')) return series.slice(0,-1);
+  } else if(u==='yearly'){
+    if(lk.slice(0,4)===String(now.getFullYear())) return series.slice(0,-1);
+  } else {
+    const diff=(now-new Date(lk))/86400000;          // 일/주: 마지막 구간이 아직 안 끝났으면 제외
+    if(u==='weekly' ? diff<7 : diff<1) return series.slice(0,-1);
+  }
+  return series;
+}
+// 완결 구간 기준 증감률 (lookback = 몇 구간 전과 비교할지)
+function pctChange(series, lookback, unit){
+  const s=trimPartial(series, unit);
+  if(s.length<2) return null;
+  const b=+s[s.length-1].ratio, a=+s[Math.max(0, s.length-1-(lookback||1))].ratio;
+  if(!a||!isFinite(a)||!isFinite(b)) return null;
+  return Math.round((b-a)/a*1000)/10;
+}
+// 분야 객체 → 완결월 기준 전월 대비 증감률
+// (Edge가 주는 c.change는 집계 중인 이번 달을 포함하므로 쓰지 않는다)
+function catChangeOf(c){
+  const v=pctChange(c&&c.data, 1, 'monthly');
+  return v==null ? ((c&&typeof c.change==='number') ? c.change : 0) : v;
+}
+
+// ── 분야 상대 강도 ───────────────────────────────────────────────
+// DataLab 지수는 조회 구간의 최댓값을 100으로 정규화한다. 그 결과 7개 분야가
+// 전부 단조 하락으로 나와(2025-07=100 기준) 절대 증감률만으로는 어떤 분야도
+// '성장'으로 보이지 않는다. 시장 공통 드리프트를 빼고 남는 '상대적으로 잘 버티는
+// 정도'가 실제로 판단에 쓸 수 있는 신호다.
+//   rel = 해당 분야 전월비 − 7개 분야 전월비의 중앙값
+function catTrends(catData){
+  const arr=(catData||[]).map(c=>({ name:c.name, ratio:c.ratio, data:c.data, mom:catChangeOf(c) }));
+  if(!arr.length) return arr;
+  const ms=arr.map(x=>x.mom).sort((a,b)=>a-b);
+  const mid=ms.length%2 ? ms[(ms.length-1)/2] : (ms[ms.length/2-1]+ms[ms.length/2])/2;
+  arr.forEach(x=>{ x.rel=Math.round((x.mom-mid)*10)/10; });
+  return arr.sort((a,b)=>b.rel-a.rel);
+}
+
 function loadDemo(){ state.live=false; state.total=270000;
   state.products=DEMO_SEED.map(d=>({...d,image:null,link:null,priceText:d.price.toLocaleString()+'원'})); state.selected=0; }
 
@@ -660,9 +710,7 @@ function renderAIReport(){
   // 트렌드 방향(카테고리 DataLab)
   let dir='', trendTxt='추이 데이터 없음';
   if(state.trend && state.trend.length>=2){
-    const i0=Math.max(0,state.trend.length-6);
-    const a=+state.trend[i0].ratio, b=+state.trend[state.trend.length-1].ratio;
-    const ch=a?Math.round((b-a)/a*100):0;
+    const ch=Math.round(pctChange(state.trend, 5)||0);   // 완결 구간 6개(=5구간 전 대비)
     dir = ch>8?'상승':ch<-8?'하락':'보합';
     trendTxt = `최근 6개월 검색 트렌드 ${dir}세(${ch>0?'+':''}${ch}%)`;
   }
@@ -828,21 +876,22 @@ function openWatch(){
 const CAT_REPKW={'디지털/가전':'무선이어폰','스포츠/레저':'캠핑','식품':'간편식','화장품/미용':'선크림','패션의류':'원피스','가구/인테리어':'수납장','출산/육아':'이유식'};
 async function openCategoryOverview(){
   if(!state.catData && cfgOK){ try{ const r=await afetch('/api/naver/categories?period=monthly'); const j=await r.json(); if(j&&j.success) state.catData=j.data; }catch(e){} }
-  const cats = state.catData ? [...state.catData].sort((a,b)=>b.change-a.change) : [];
+  const cats = catTrends(state.catData);
   if(!cats.length){ showModal('🗂️ 분야 비교 개요', '<div class="tabnote">분야 데이터를 불러오지 못했습니다. 네이버 연결을 확인하세요.</div>', 'catOv'); return; }
-  const sig=ch=> ch>5?['🟢 기회','var(--green)'] : ch<-5?['🔴 신중','var(--red)'] : ['⚪ 관망','var(--sub)'];
-  const rows=cats.map((c,i)=>{ const kw=CAT_REPKW[c.name]||c.name; const s=sig(c.change);
+  const sig=rel=> rel>3?['🟢 상대 강세','var(--green)'] : rel<-3?['🔴 상대 약세','var(--red)'] : ['⚪ 중립','var(--sub)'];
+  const rows=cats.map((c,i)=>{ const kw=CAT_REPKW[c.name]||c.name; const s=sig(c.rel);
     return `<tr>
       <td class="nm" style="font-weight:700">${c.name}</td>
       <td>지수 ${c.ratio}</td>
-      <td class="${c.change>0?'up':'dn'}">${c.change>0?'▲':'▼'} ${Math.abs(c.change)}%</td>
+      <td class="${c.rel>0?'up':'dn'}">${c.rel>0?'▲':'▼'} ${Math.abs(c.rel)}%p<div style="font-size:10.5px;color:var(--muted);font-weight:600">실측 ${c.mom>0?'+':''}${c.mom}%</div></td>
       <td><span id="cp_${i}" style="color:var(--sub)">…</span></td>
       <td style="color:${s[1]};font-weight:700">${s[0]}</td>
       <td><button class="seln" onclick="document.getElementById('q').value='${kw}';doSearch();closeModal('catOv')">분석 →</button></td>
     </tr>`;
   }).join('');
   showModal('📈 분야 분석·트렌드 · 지금 뜨는/지는 분야', `<div class="tabnote" style="padding:0 0 8px">네이버 DataLab 7대 분야 · 증감률 순 — 오늘 어느 분야를 팔지 한눈에 (트렌드+가격대+신호)</div>
-    <table class="ctab"><thead><tr><th>분야</th><th>검색지수</th><th>트렌드</th><th>대표 가격대</th><th>신호</th><th></th></tr></thead><tbody>${rows}</tbody></table>`, 'catOv');
+    <table class="ctab"><thead><tr><th>분야</th><th>검색지수</th><th>상대강도</th><th>대표 가격대</th><th>신호</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="tabnote" style="padding:10px 0 0;line-height:1.6">DataLab 지수는 조회 구간 최댓값을 100으로 정규화해 <b>7개 분야가 전부 하락</b>으로 나옵니다(실측 % 참고). 그래서 시장 공통 하락분(분야 중앙값)을 뺀 <b>상대강도(%p)</b>로 비교합니다. 집계 중인 이번 달은 제외.</div>`, 'catOv');
   // 대표 가격대 lazy 채우기(병렬) — 각 분야 대표 키워드 검색 중앙값
   if(cfgOK) cats.forEach((c,i)=>{ const kw=CAT_REPKW[c.name]||c.name;
     afetch(`/api/naver/search?q=${encodeURIComponent(kw)}&display=10`).then(r=>r.json()).then(j=>{
@@ -873,9 +922,9 @@ const SEED_KW = {
 };
 
 // 발굴점수: 세 축을 분해해서 보여준다(왜 이 순위인지 MD가 검증 가능해야 함)
-function discoveryScore(catChange, total, med){
-  // 트렌드(0~35) — 분야 검색 증감률. 0%면 중간(17.5), ±25%에서 포화
-  const T = Math.max(0, Math.min(35, 17.5 + (catChange||0)*0.7));
+function discoveryScore(catRel, total, med){
+  // 트렌드(0~35) — 분야 '상대' 강도(중앙값 대비 %p). 중앙값이면 17.5, ±8.75%p에서 포화
+  const T = Math.max(0, Math.min(35, 17.5 + (catRel||0)*2));
   // 경쟁 여유(0~40) — 매물 3천=40 / 1만=32 / 10만=16 / 100만=0 (log10 눈금)
   const C = (total==null) ? 20 : Math.max(0, Math.min(40, 40 - (Math.log10(Math.max(total,1))-3.5)*16));
   // 가격 매력(0~25) — 2~8만원대가 마진·객단가 균형이 좋다는 MD 경험칙(미검증 휴리스틱)
@@ -916,12 +965,13 @@ async function scanDiscovery(scope, onProgress){
     if(j&&j.success&&Array.isArray(j.data)) state.catData=j.data;
   }
   if(!state.catData||!state.catData.length) throw new Error('NO_CATDATA');
-  const cats=[...state.catData].sort((a,b)=>b.change-a.change);
-  const picked = scope==='all' ? cats : cats.slice(0,4);   // 성장 분야 우선 스크리닝
+  // 집계 중인 이번 달 제외 + 시장 공통 드리프트 제거 → 상대 강도순 정렬
+  const cats=catTrends(state.catData);
+  const picked = scope==='all' ? cats : cats.slice(0,4);   // 상대적으로 강한 분야 우선 스크리닝
 
   // 2단계 — 시드 키워드 실측
   const jobs=[];
-  picked.forEach(c=>(SEED_KW[c.name]||[]).forEach(kw=>jobs.push({kw, cat:c.name, change:c.change, ratio:c.ratio})));
+  picked.forEach(c=>(SEED_KW[c.name]||[]).forEach(kw=>jobs.push({kw, cat:c.name, mom:c.mom, rel:c.rel})));
   let done=0;
   const rows=await runPool(jobs, 5, async(job)=>{
     const r=await afetch(`/api/naver/search?q=${encodeURIComponent(job.kw)}&display=10`);
@@ -930,8 +980,8 @@ async function scanDiscovery(scope, onProgress){
     if(!(j&&j.success&&Array.isArray(j.data)&&j.data.length)) return null;
     const ps=j.data.map(x=>x.price||x.priceLow||0).filter(Boolean).sort((a,b)=>a-b);
     const med=ps.length?ps[Math.floor(ps.length/2)]:0;
-    const sc=discoveryScore(job.change, j.total, med);
-    return { kw:job.kw, cat:job.cat, change:job.change, total:j.total, med, top:(j.data[0]&&j.data[0].name)||'', ...sc };
+    const sc=discoveryScore(job.rel, j.total, med);
+    return { kw:job.kw, cat:job.cat, mom:job.mom, rel:job.rel, total:j.total, med, top:(j.data[0]&&j.data[0].name)||'', ...sc };
   });
   return rows.filter(Boolean).sort((a,b)=>b.s-a.s);
 }
@@ -998,7 +1048,10 @@ function renderDiscovery(rows, scope, ts){
           <span style="width:${r.P*1.1}px;background:var(--amber)"></span>
         </div>
       </td>
-      <td class="${r.change>0?'up':'dn'}">${r.change>0?'▲':'▼'} ${Math.abs(r.change)}%</td>
+      <td>
+        <div class="${r.rel>0?'up':'dn'}">${r.rel>0?'▲':'▼'} ${Math.abs(r.rel)}%p</div>
+        <div style="font-size:10.5px;color:var(--muted);font-weight:600">실측 ${r.mom>0?'+':''}${r.mom}%</div>
+      </td>
       <td>${r.total!=null?fmtK(r.total):'-'}</td>
       <td>${r.med?won(r.med):'-'}</td>
       <td style="color:${sg[1]};font-weight:700;white-space:nowrap">${sg[0]}</td>
@@ -1008,12 +1061,14 @@ function renderDiscovery(rows, scope, ts){
 
   showModal('🎯 오늘의 발굴 · 지금 볼 만한 후보 TOP 20', head + `
     <table class="ctab"><thead><tr>
-      <th>#</th><th>키워드</th><th>발굴점수</th><th>분야 트렌드</th><th>매물수</th><th>가격중앙값</th><th>신호</th><th></th>
+      <th>#</th><th>키워드</th><th>발굴점수</th><th>분야 상대강도</th><th>매물수</th><th>가격중앙값</th><th>신호</th><th></th>
     </tr></thead><tbody>${body}</tbody></table>
     <div class="tabnote" style="padding:10px 0 0;line-height:1.65">
-      <b>점수 구성</b> — <span style="color:var(--primary)">■</span> 트렌드 35 (DataLab 분야 증감률) ·
+      <b>점수 구성</b> — <span style="color:var(--primary)">■</span> 트렌드 35 (분야 상대강도) ·
       <span style="color:var(--green)">■</span> 경쟁 여유 40 (네이버 매물수) ·
       <span style="color:var(--amber)">■</span> 가격 매력 25 (중앙값 2~8만원 우대). 모두 실데이터 기반.<br>
+      <b>분야 상대강도란</b> — DataLab 지수는 조회 구간 최댓값을 100으로 정규화해 <b>7개 분야가 전부 하락으로 나옵니다</b>(실측 % 참고).
+      그래서 시장 공통 하락분(분야 중앙값)을 뺀 <b>상대적으로 잘 버티는 정도(%p)</b>를 씁니다. 집계 중인 이번 달은 제외하고 완결월끼리 비교합니다.<br>
       ※ 성공확률이 아니라 <b>먼저 볼 순서</b>입니다. 가중치는 아직 성과로 검증되지 않은 고정 휴리스틱이며, 판매 성과가 쌓이면 보정할 예정입니다.
     </div>`, 'discOv');
 }
@@ -1037,7 +1092,7 @@ function buildPlan(){
   const med=prices.length?prices[Math.floor(prices.length/2)]:0;
   const avg=prices.length?Math.round(prices.reduce((a,b)=>a+b,0)/prices.length):0;
   let dir='', trendTxt='추이 데이터 없음';
-  if(state.trend&&state.trend.length>=2){ const i0=Math.max(0,state.trend.length-6); const a=+state.trend[i0].ratio,b=+state.trend[state.trend.length-1].ratio; const ch=a?Math.round((b-a)/a*100):0; dir=ch>8?'상승':ch<-8?'하락':'보합'; trendTxt=`${state.trendCat||'카테고리'} ${dir}세 (${ch>0?'+':''}${ch}%)`; }
+  if(state.trend&&state.trend.length>=2){ const ch=Math.round(pctChange(state.trend,5)||0); dir=ch>8?'상승':ch<-8?'하락':'보합'; trendTxt=`${state.trendCat||'카테고리'} ${dir}세 (${ch>0?'+':''}${ch}%)`; }
   const [cl]=compLabel(state.total), sz=sizeLabel(state.total);
   const bk=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
   const cnt=bk.map(b=>prices.filter(x=>x>=b[1]&&x<b[2]).length);
