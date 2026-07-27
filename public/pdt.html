@@ -83,6 +83,12 @@
   .rail-item .ic{ width:16px; text-align:center; }
   .rail-item:hover{ background:var(--bg); }
   .rail-item.on{ background:var(--primary-soft); color:var(--primary); font-weight:800; }
+  .rail-item.disc{ border:1px solid var(--primary); color:var(--primary); font-weight:800; margin-bottom:5px; }
+  .rail-item.disc:hover{ background:var(--primary-soft); }
+  .dsc-bar{ height:5px; border-radius:4px; background:var(--line2); overflow:hidden; }
+  .dsc-bar i{ display:block; height:100%; background:var(--primary); transition:width .25s; }
+  .dsc-seg{ display:flex; gap:2px; align-items:center; }
+  .dsc-seg span{ height:9px; border-radius:2px; display:inline-block; }
   .rail-cat{ display:flex; align-items:center; gap:9px; padding:7px 8px; border-radius:8px; font-size:12.5px; cursor:pointer; color:var(--text); }
   .rail-cat:hover{ background:var(--bg); }
   .rail-cat .chk{ width:15px; height:15px; border-radius:4px; border:1.5px solid var(--line); flex-shrink:0; }
@@ -165,7 +171,8 @@
   .titlerow{ display:flex; align-items:center; gap:10px; }
   .titlerow .tt{ font-size:18px; font-weight:800; }
   .star-add{ font-size:12px; color:var(--sub); font-weight:700; cursor:pointer; }
-  .seln{ font-size:11px; color:var(--sub); border:1px solid var(--line); border-radius:8px; padding:5px 9px; cursor:pointer; }
+  .seln{ font-size:11px; color:var(--sub); border:1px solid var(--line); border-radius:8px; padding:5px 9px; cursor:pointer; background:#fff; }
+  .seln.on{ background:var(--primary); border-color:var(--primary); color:#fff; font-weight:700; }
 
   /* ===== ③ AI 리포트 ===== */
   .ai-summary{ font-size:11px; line-height:1.4; color:var(--text); background:var(--bg); border-radius:8px; padding:6px 9px; }
@@ -315,6 +322,7 @@
     <aside class="col-rail card">
       <div class="rail-sec">
         <div class="rail-lbl">탐색</div>
+        <div class="rail-item disc" onclick="navMenu(this,'discover')"><span class="ic">🎯</span> 오늘의 발굴 <span class="pill g" style="font-size:8px;margin-left:auto">AUTO</span></div>
         <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
         <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">📈</span> 분야 분석·트렌드</div>
         <div class="rail-item" onclick="navMenu(this,'watch')"><span class="ic">⭐</span> 관심 키워드 <span id="watchCnt" class="pill b" style="font-size:8px;margin-left:auto">0</span></div>
@@ -479,7 +487,7 @@ const DEMO_SEED = [
   {name:'휴대용 선풍기',rating:'4.5',reviews:4321,price:21000,growth:18,score:65},
   {name:'접이식 캠핑 선풍기',rating:'4.4',reviews:3210,price:15000,growth:15,score:58},
 ];
-const state = { query:'캠핑 선풍기', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false, period:'monthly' };
+const state = { query:'캠핑 선풍기', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false, period:'monthly', discScope:'top' };
 const PLIST_MIN = 6;   // ① 기본 표시 개수(나머지는 '더 보기')
 
 // 검색어 → DataLab 7대 카테고리 매핑(카테고리 트렌드 실데이터 연결용)
@@ -783,6 +791,7 @@ function railCat(el, kw){
 function navMenu(el, mode){
   document.querySelectorAll('.rail-item').forEach(x=>x.classList.remove('on')); el.classList.add('on');
   if(mode==='search'){ const q=document.getElementById('q'); q.focus(); q.select(); }
+  else if(mode==='discover'){ openDiscovery(); }
   else if(mode==='category'){ openCategoryOverview(); }
   else if(mode==='watch'){ openWatch(); }
   else if(mode==='compare'){ setTab('compete', document.querySelector('#tabs .tab:nth-child(3)')); document.getElementById('tabBody').scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -842,6 +851,171 @@ async function openCategoryOverview(){
       else el.textContent='-';
     }).catch(()=>{ const el=document.getElementById('cp_'+i); if(el)el.textContent='-'; });
   });
+}
+
+// ===================== 🎯 자동 발굴 (Auto Discovery) =====================
+// v1.0은 "MD가 키워드를 알아야" 시작되는 pull 구조였다.
+// 여기서는 검색어 없이 시스템이 먼저 후보를 뽑아 순위를 매긴다(push).
+//   1단계) DataLab 7대 분야 트렌드로 성장 분야 스크리닝
+//   2단계) 해당 분야 시드 키워드를 네이버 검색으로 실측(매물수·가격중앙값)
+//   3단계) 발굴점수 = 트렌드(35) + 경쟁여유(40) + 가격매력(25) 랭킹
+// ※ 검증된 성공확률이 아니라 "먼저 볼 순서"를 정하는 우선순위 점수다.
+//    (성과 데이터가 쌓이기 전까지 가중치는 고정 휴리스틱임을 UI에 명시)
+
+const SEED_KW = {
+  '디지털/가전':  ['무선이어폰','블루투스 스피커','보조배터리','서큘레이터','무선청소기','전기포트','차량용 충전기','스마트워치 스트랩'],
+  '스포츠/레저':  ['캠핑 의자','캠핑 테이블','등산 스틱','요가매트','자전거 라이트','아이스박스','워터슈즈','낚시 릴'],
+  '패션의류':     ['린넨 셔츠','냉감 티셔츠','여름 원피스','와이드 팬츠','샌들','래시가드','볼캡','크로스백'],
+  '화장품/미용':  ['선크림','쿠션 팩트','클렌징 오일','헤어 에센스','바디 미스트','마스크팩','립밤','두피 스케일러'],
+  '가구/인테리어':['수납장','접이식 테이블','무드등','암막커튼','러그','옷걸이','신발장','화장대'],
+  '출산/육아':    ['이유식 용기','유아 물놀이','기저귀 가방','아기 선풍기','유아 매트','아기 튜브','젖병 세정제','유모차 커버'],
+  '식품':         ['간편식','냉동 과일','콜드브루','단백질 쉐이크','밀키트','견과류','이온음료','곤약젤리'],
+};
+
+// 발굴점수: 세 축을 분해해서 보여준다(왜 이 순위인지 MD가 검증 가능해야 함)
+function discoveryScore(catChange, total, med){
+  // 트렌드(0~35) — 분야 검색 증감률. 0%면 중간(17.5), ±25%에서 포화
+  const T = Math.max(0, Math.min(35, 17.5 + (catChange||0)*0.7));
+  // 경쟁 여유(0~40) — 매물 3천=40 / 1만=32 / 10만=16 / 100만=0 (log10 눈금)
+  const C = (total==null) ? 20 : Math.max(0, Math.min(40, 40 - (Math.log10(Math.max(total,1))-3.5)*16));
+  // 가격 매력(0~25) — 2~8만원대가 마진·객단가 균형이 좋다는 MD 경험칙(미검증 휴리스틱)
+  let P = 12;
+  if(med) P = med<10000 ? 6 : med<20000 ? 14 : med<=80000 ? 25 : med<=150000 ? 17 : 10;
+  return { s:Math.round(T+C+P), T:Math.round(T), C:Math.round(C), P:Math.round(P) };
+}
+function discSignal(r){
+  if(r.total!=null && r.total>500000) return ['🔴 과열','var(--red)'];
+  if(r.s>=70) return ['🟢 우선 검토','var(--green)'];
+  if(r.s>=55) return ['🟡 관찰','var(--amber)'];
+  return ['⚪ 후순위','var(--sub)'];
+}
+// 동시 실행 제한 러너 (네이버 API 과호출 방지)
+async function runPool(items, limit, worker){
+  const out=new Array(items.length); let idx=0;
+  await Promise.all(Array.from({length:Math.min(limit,items.length)}, async()=>{
+    while(idx<items.length){ const i=idx++; try{ out[i]=await worker(items[i],i); }catch(e){ out[i]=null; } }
+  }));
+  return out;
+}
+
+const DISC_KEY='pdt_discovery';
+function discCacheGet(scope){
+  try{ const c=JSON.parse(localStorage.getItem(DISC_KEY)||'null');
+    if(c && c.scope===scope && c.day===new Date().toDateString()) return c; }catch(e){}
+  return null;
+}
+function discCacheSet(scope, rows){
+  try{ localStorage.setItem(DISC_KEY, JSON.stringify({scope, day:new Date().toDateString(), ts:Date.now(), rows})); }catch(e){}
+}
+
+// 1~2단계 실측 스캔
+async function scanDiscovery(scope, onProgress){
+  // 1단계 — 분야 트렌드
+  if(!state.catData){
+    const r=await afetch('/api/naver/categories?period=monthly'); const j=await r.json();
+    if(j&&j.success&&Array.isArray(j.data)) state.catData=j.data;
+  }
+  if(!state.catData||!state.catData.length) throw new Error('NO_CATDATA');
+  const cats=[...state.catData].sort((a,b)=>b.change-a.change);
+  const picked = scope==='all' ? cats : cats.slice(0,4);   // 성장 분야 우선 스크리닝
+
+  // 2단계 — 시드 키워드 실측
+  const jobs=[];
+  picked.forEach(c=>(SEED_KW[c.name]||[]).forEach(kw=>jobs.push({kw, cat:c.name, change:c.change, ratio:c.ratio})));
+  let done=0;
+  const rows=await runPool(jobs, 5, async(job)=>{
+    const r=await afetch(`/api/naver/search?q=${encodeURIComponent(job.kw)}&display=10`);
+    const j=await r.json();
+    done++; if(onProgress) onProgress(done, jobs.length);
+    if(!(j&&j.success&&Array.isArray(j.data)&&j.data.length)) return null;
+    const ps=j.data.map(x=>x.price||x.priceLow||0).filter(Boolean).sort((a,b)=>a-b);
+    const med=ps.length?ps[Math.floor(ps.length/2)]:0;
+    const sc=discoveryScore(job.change, j.total, med);
+    return { kw:job.kw, cat:job.cat, change:job.change, total:j.total, med, top:(j.data[0]&&j.data[0].name)||'', ...sc };
+  });
+  return rows.filter(Boolean).sort((a,b)=>b.s-a.s);
+}
+
+async function openDiscovery(scope, force){
+  scope = scope || state.discScope || 'top';
+  state.discScope = scope;
+  const head = (note)=>`
+    <div class="tabnote" style="padding:0 0 9px">검색어 없이 시스템이 먼저 후보를 뽑습니다 — ① 분야 트렌드 스크리닝 → ② 시드 키워드 실측(매물수·가격) → ③ 발굴점수 랭킹. ${note}</div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap">
+      <button class="seln ${scope==='top'?'on':''}" onclick="openDiscovery('top')">성장 분야 4개</button>
+      <button class="seln ${scope==='all'?'on':''}" onclick="openDiscovery('all')">전체 7개 분야</button>
+      <button class="seln" style="margin-left:auto" onclick="openDiscovery('${scope}',1)">🔄 새로 스캔</button>
+    </div>`;
+
+  if(!cfgOK){ showModal('🎯 오늘의 발굴', head('') + '<div class="tabnote">네이버 연결이 없어 자동 발굴을 실행할 수 없습니다. config.js의 Supabase 설정을 확인하세요.</div>', 'discOv'); return; }
+
+  const cached = force ? null : discCacheGet(scope);
+  if(cached){ renderDiscovery(cached.rows, scope, cached.ts); return; }
+
+  const n = scope==='all' ? 56 : 32;
+  showModal('🎯 오늘의 발굴', head('') + `
+    <div style="padding:14px 2px">
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:7px">시장 스캔 중 <span id="dscN">0</span> / ${n}</div>
+      <div class="dsc-bar"><i id="dscBar" style="width:0%"></i></div>
+      <div class="tabnote" style="padding:8px 0 0">네이버 실검색으로 키워드마다 매물수·가격을 직접 확인합니다. 20~40초 정도 걸립니다.</div>
+    </div>`, 'discOv');
+
+  try{
+    const rows=await scanDiscovery(scope,(d,t)=>{
+      const a=document.getElementById('dscN'), b=document.getElementById('dscBar');
+      if(a) a.textContent=d; if(b) b.style.width=Math.round(d/t*100)+'%';
+    });
+    if(!document.getElementById('discOv')) return;    // 사용자가 닫았으면 중단
+    discCacheSet(scope, rows);
+    renderDiscovery(rows, scope, Date.now());
+  }catch(e){
+    showModal('🎯 오늘의 발굴', head('') + '<div class="tabnote">분야 트렌드를 불러오지 못해 스캔을 중단했습니다. 잠시 후 다시 시도하세요.</div>', 'discOv');
+  }
+}
+
+function renderDiscovery(rows, scope, ts){
+  const when=new Date(ts).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const head=`
+    <div class="tabnote" style="padding:0 0 9px">검색어 없이 시스템이 먼저 후보를 뽑습니다 — ① 분야 트렌드 스크리닝 → ② 시드 키워드 실측(매물수·가격) → ③ 발굴점수 랭킹. <b>${when} 기준 · ${rows.length}개 실측</b></div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:9px;flex-wrap:wrap">
+      <button class="seln ${scope==='top'?'on':''}" onclick="openDiscovery('top')">성장 분야 4개</button>
+      <button class="seln ${scope==='all'?'on':''}" onclick="openDiscovery('all')">전체 7개 분야</button>
+      <button class="seln" style="margin-left:auto" onclick="openDiscovery('${scope}',1)">🔄 새로 스캔</button>
+    </div>`;
+  if(!rows.length){ showModal('🎯 오늘의 발굴', head+'<div class="tabnote">실측된 후보가 없습니다.</div>', 'discOv'); return; }
+
+  const body = rows.slice(0,20).map((r,i)=>{
+    const sg=discSignal(r);
+    const esc=r.kw.replace(/'/g,'');
+    return `<tr>
+      <td style="color:var(--muted);font-weight:800">${i+1}</td>
+      <td class="nm" style="font-weight:800">${r.kw}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
+      <td>
+        <div style="font-weight:800;font-size:14px">${r.s}</div>
+        <div class="dsc-seg" title="트렌드 ${r.T}/35 · 경쟁여유 ${r.C}/40 · 가격 ${r.P}/25">
+          <span style="width:${r.T*1.1}px;background:var(--primary)"></span>
+          <span style="width:${r.C*1.1}px;background:var(--green)"></span>
+          <span style="width:${r.P*1.1}px;background:var(--amber)"></span>
+        </div>
+      </td>
+      <td class="${r.change>0?'up':'dn'}">${r.change>0?'▲':'▼'} ${Math.abs(r.change)}%</td>
+      <td>${r.total!=null?fmtK(r.total):'-'}</td>
+      <td>${r.med?won(r.med):'-'}</td>
+      <td style="color:${sg[1]};font-weight:700;white-space:nowrap">${sg[0]}</td>
+      <td><button class="seln" onclick="document.getElementById('q').value='${esc}';doSearch();closeModal('discOv')">분석 →</button></td>
+    </tr>`;
+  }).join('');
+
+  showModal('🎯 오늘의 발굴 · 지금 볼 만한 후보 TOP 20', head + `
+    <table class="ctab"><thead><tr>
+      <th>#</th><th>키워드</th><th>발굴점수</th><th>분야 트렌드</th><th>매물수</th><th>가격중앙값</th><th>신호</th><th></th>
+    </tr></thead><tbody>${body}</tbody></table>
+    <div class="tabnote" style="padding:10px 0 0;line-height:1.65">
+      <b>점수 구성</b> — <span style="color:var(--primary)">■</span> 트렌드 35 (DataLab 분야 증감률) ·
+      <span style="color:var(--green)">■</span> 경쟁 여유 40 (네이버 매물수) ·
+      <span style="color:var(--amber)">■</span> 가격 매력 25 (중앙값 2~8만원 우대). 모두 실데이터 기반.<br>
+      ※ 성공확률이 아니라 <b>먼저 볼 순서</b>입니다. 가중치는 아직 성과로 검증되지 않은 고정 휴리스틱이며, 판매 성과가 쌓이면 보정할 예정입니다.
+    </div>`, 'discOv');
 }
 
 // 공통 모달(동적 생성)
