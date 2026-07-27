@@ -88,7 +88,10 @@ async function fetchNaverCategoryTrend(period) {
 }
 
 // 네이버 키워드 트렌드 조회
-async function fetchNaverKeywords(keywords, period) {
+// 네이버 쇼핑인사이트는 "전체 대상 키워드 트렌드" 엔드포인트가 없음 -- 키워드 트렌드는
+// 반드시 분야(category) 내에서만 조회 가능 (POST /v1/datalab/shopping/category/keywords).
+// 구버전 코드는 존재하지 않는 /v1/datalab/shopping/keywords 를 호출해 404가 났었음.
+async function fetchNaverKeywords(keywords, period, categoryCode) {
   const { startDate, endDate } = getPeriodDates(period);
   const timeUnit = period === 'daily' ? 'date' : period === 'weekly' ? 'week' : 'month';
 
@@ -96,14 +99,15 @@ async function fetchNaverKeywords(keywords, period) {
     startDate,
     endDate,
     timeUnit,
-    keywordGroups: keywords.map(kw => ({ groupName: kw, keywords: [kw] })),
+    category: categoryCode,
+    keyword: keywords.map(kw => ({ name: kw, param: [kw] })),
     device: '',
     ages: [],
     gender: ''
   };
 
   const res = await axios.post(
-    'https://openapi.naver.com/v1/datalab/shopping/keywords',
+    'https://openapi.naver.com/v1/datalab/shopping/category/keywords',
     body,
     {
       headers: {
@@ -149,18 +153,32 @@ app.get('/api/naver/categories', async (req, res) => {
   }
 });
 
-// 네이버 키워드 트렌드
+// 네이버 키워드 트렌드 (분야 내 키워드별 -- 반드시 category 필요)
 app.post('/api/naver/keywords', async (req, res) => {
   if (!NAVER_CLIENT_ID || NAVER_CLIENT_ID === '여기에_클라이언트_아이디') {
     return res.status(503).json({ error: 'NAVER_API_NOT_CONFIGURED' });
   }
   try {
-    const { keywords, period } = req.body;
+    const { keywords, period, category, categoryName } = req.body;
     if (!keywords || keywords.length === 0) return res.status(400).json({ error: 'keywords required' });
-    const data = await fetchNaverKeywords(keywords.slice(0, 5), period || 'daily');
-    res.json({ success: true, data });
+
+    let categoryCode = category;
+    if (!categoryCode && categoryName) {
+      categoryCode = NAVER_CATEGORIES.find(c => c.name === categoryName)?.code;
+    }
+    if (!categoryCode) {
+      return res.status(400).json({
+        error: 'category required',
+        message: '네이버 쇼핑인사이트는 키워드 트렌드를 분야(category) 내에서만 조회 가능합니다. category(catId) 또는 categoryName을 지정하세요.',
+        availableCategories: NAVER_CATEGORIES,
+      });
+    }
+
+    const data = await fetchNaverKeywords(keywords.slice(0, 5), period || 'daily', categoryCode);
+    res.json({ success: true, categoryCode, data });
   } catch (err) {
-    res.status(500).json({ error: 'NAVER_API_ERROR', message: err.message });
+    console.error('Naver Keywords API error:', JSON.stringify(err.response?.data), err.message);
+    res.status(500).json({ error: 'NAVER_API_ERROR', message: err.response?.data?.errorMessage || err.message });
   }
 });
 
