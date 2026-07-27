@@ -116,8 +116,8 @@
   .prow1{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
   .pnm{ font-size:13px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pscore{ font-size:13px; font-weight:800; color:#fff; background:var(--primary); border-radius:7px; padding:2px 8px; flex-shrink:0; }
-  .pstar{ font-size:11px; color:var(--amber); font-weight:700; margin-top:3px; }
-  .pstar i{ color:var(--sub); font-weight:500; font-style:normal; }
+  .psub{ font-size:10.5px; color:var(--muted); font-weight:600; margin-top:3px;
+         white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pmeta{ display:flex; gap:12px; margin-top:5px; font-size:10.5px; color:var(--sub); }
   .pmeta b{ color:var(--text); font-weight:700; }
   .pmeta .up{ color:var(--green); font-weight:800; }
@@ -479,8 +479,8 @@ const EDGE = CFG.EDGE_FUNCTION || 'market-api';
 const API  = cfgOK ? `${CFG.SUPABASE_URL}/functions/v1/${EDGE}` : '';
 function afetch(path){ const h={}; if(cfgOK){ h.apikey=CFG.SUPABASE_ANON_KEY; h.Authorization='Bearer '+CFG.SUPABASE_ANON_KEY; } return fetch(API+path,{headers:h}); }
 
-function hashStr(s){ let h=0; for(let i=0;i<(s||'').length;i++) h=(h*31+s.charCodeAt(i))|0; return Math.abs(h); }
-function demoMeta(name){ const h=hashStr(name); return { rating:(3.9+(h%11)/10).toFixed(1), reviews:300+(h%140)*90, growth:((h%46)-8) }; }
+// (구 demoMeta/hashStr 제거 — 평점·리뷰수·성장률을 해시로 지어내 실가격 옆에
+//  진짜처럼 표시하던 코드였음. 네이버 API에 원천이 없어 표시 자체를 걷어냄)
 function won(n){ return n>=10000 ? (Math.round(n/1000)/10)+'만원' : (n?n.toLocaleString()+'원':'-'); }
 function fmtK(n){ return n>=100000000?(n/100000000).toFixed(1)+'억':n>=10000?(Math.round(n/1000)/10)+'만':n>=1000?(n/1000).toFixed(1)+'천':String(n); }
 
@@ -609,6 +609,32 @@ function catTrends(catData){
   return arr.sort((a,b)=>b.rel-a.rel);
 }
 
+// ── 일일 스냅샷 누적 ──────────────────────────────────────────────
+// 네이버 검색 API는 리뷰수·평점·판매량을 주지 않는다(확인함). 대신 매물수와
+// 가격은 실제로 주므로, 조회할 때마다 그날 값을 저장해 시계열을 스스로 만든다.
+// 경쟁이 늘고 있는지 / 가격이 무너지고 있는지는 MD에게 리뷰수보다 직접적인 신호다.
+const SNAP_KEY='pdt_snapshots', SNAP_MAX_DAYS=120, SNAP_MAX_KW=300;
+function todayKey(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function snapAll(){ try{ return JSON.parse(localStorage.getItem(SNAP_KEY)||'{}'); }catch(e){ return {}; } }
+function snapSave(kw, total, med){
+  if(!kw || total==null) return;
+  const all=snapAll(); const day=todayKey();
+  const arr=all[kw]||[];
+  const i=arr.findIndex(x=>x.d===day);
+  const rec={ d:day, t:total, m:med||0 };
+  if(i>=0) arr[i]=rec; else arr.push(rec);            // 하루 1건(같은 날 재조회는 덮어씀)
+  arr.sort((a,b)=>a.d<b.d?-1:1);
+  all[kw]=arr.slice(-SNAP_MAX_DAYS);
+  const keys=Object.keys(all);
+  if(keys.length>SNAP_MAX_KW){                        // 오래된 키워드부터 정리
+    keys.map(k=>[k,(all[k][all[k].length-1]||{}).d||'']).sort((a,b)=>a[1]<b[1]?-1:1)
+        .slice(0, keys.length-SNAP_MAX_KW).forEach(([k])=>{ delete all[k]; });
+  }
+  try{ localStorage.setItem(SNAP_KEY, JSON.stringify(all)); }catch(e){}
+}
+function snapSeries(kw){ return snapAll()[kw]||[]; }
+function snapDayCount(){ const all=snapAll(); const s=new Set(); for(const k in all) all[k].forEach(r=>s.add(r.d)); return s.size; }
+
 function loadDemo(){ state.live=false; state.total=270000;
   state.products=DEMO_SEED.map(d=>({...d,image:null,link:null,priceText:d.price.toLocaleString()+'원'})); state.selected=0; }
 
@@ -634,15 +660,16 @@ async function doSearch(){
     if(j && j.success && Array.isArray(j.data) && j.data.length){
       state.total=j.total;
       const items=j.data.slice(0,30).map((it,i)=>{
-        const d=demoMeta(it.name);
+        // 평점·리뷰수·성장률은 API 미제공이라 더 이상 생성하지 않는다
         return { name:it.name, image:it.image, price:it.price||it.priceLow||0,
-                 priceText:it.priceText, rating:d.rating, reviews:d.reviews, growth:d.growth,
+                 priceText:it.priceText, brand:it.brand, subCategory:it.subCategory,
                  link:it.link, mall:it.mallName };
       });
       const ps=items.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
       const med=ps.length?ps[Math.floor(ps.length/2)]:0;
       items.forEach((it,i)=>{ it.score=scoreOf(j.total,i,it.price,med); });
       state.products=items; state.med=med;
+      snapSave(q, j.total, med);                 // 오늘치 매물수·가격 적립
       state.selected=0; state.showAll=false; state.live=true; setLive('ok');
       await loadTrend();                         // 카테고리 DataLab 실트렌드
     } else { loadDemo(); setLive('demo'); }
@@ -657,7 +684,7 @@ function setLive(s){
   }
   const note=document.getElementById('demoNote');
   if(note){ note.innerHTML = s==='ok'
-    ? `🟢 <b>네이버 쇼핑 실시간</b> 연결됨 · 상품·가격·매물수는 실데이터, <b>평점·리뷰·추이 차트는 데모</b>(리뷰수집/DataLab 후 실데이터 예정)`
+    ? `🟢 <b>네이버 쇼핑 실시간</b> 연결됨 · 상품·가격·매물수·트렌드 전부 실데이터. <b>평점·리뷰수·판매량은 네이버 API가 제공하지 않아 표시하지 않습니다</b>`
     : `⚙️ <b>데모 데이터</b>로 표시 중 (네이버 연결 안 됨) — config.js의 Supabase 설정을 확인하세요`; }
 }
 
@@ -677,8 +704,12 @@ function trendChartsHTML(){
   const seg=`<span class="seg">${segs.map(([l,v])=>`<span class="${state.period===v?'on':''}" onclick="setPeriod('${v}')">${l}</span>`).join('')}</span>`;
   return `<div class="charts">
     <div class="chart"><h6><span>검색량 추이 <span id="ch1tag" class="pill a" style="font-size:8px">데모</span></span> ${seg}</h6><div id="ch1" class="plot"></div><div class="axis" id="ax1"></div></div>
-    <div class="chart"><h6>리뷰 수 추이 <span class="pill a" style="font-size:8px">데모</span></h6><div id="ch2" class="plot"></div><div class="axis" id="ax2"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
-    <div class="chart"><h6>판매 추정 추이 <span class="pill a" style="font-size:8px">데모</span></h6><div id="ch3" class="plot"></div><div class="axis" id="ax3"><span>12월</span><span>1월</span><span>2월</span><span>3월</span><span>4월</span><span>5월</span></div></div>
+    <div class="chart"><h6>매물 수 추이 <span id="ch2tag" class="pill a" style="font-size:8px">적립 중</span></h6><div id="ch2" class="plot"></div><div class="axis" id="ax2"></div></div>
+    <div class="chart"><h6>가격 중앙값 추이 <span id="ch3tag" class="pill a" style="font-size:8px">적립 중</span></h6><div id="ch3" class="plot"></div><div class="axis" id="ax3"></div></div>
+  </div>
+  <div class="tabnote" style="padding:9px 0 0;line-height:1.6">
+    <b>*</b> 표시된 마지막 구간은 <b>아직 집계 중</b>이라 확정값이 아닙니다(점선). 점수 계산에서는 제외됩니다.<br>
+    <b>📂 분야 전체</b> 배지는 이 검색어의 DataLab 단독 데이터가 없어 <b>분야 추이로 대체</b>했다는 뜻입니다 — 검색어 자체의 추이가 아닙니다.
   </div>`;
 }
 function priceAnalysisHTML(){
@@ -795,16 +826,20 @@ function renderProducts(){
   const el=document.getElementById('plist'); if(!el)return;
   const all=state.products, n=all.length;
   const vis = state.showAll ? all : all.slice(0, PLIST_MIN);
+  // 평점·리뷰수·성장률은 네이버 검색 API가 주지 않는다(확인함) → 지어내지 않고
+  // 실제로 받는 값(브랜드·세부카테고리·가격·중앙값 대비)만 보여준다.
+  const med=state.med||0;
   let html=vis.map((p,i)=>{
-    const full=Math.round(parseFloat(p.rating));
-    const stars='★'.repeat(full)+'<i>'+'☆'.repeat(5-full)+'</i>';
     const thumb=p.image?`<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;border-radius:9px" onerror="this.parentNode.textContent='🌀'">`:'🌀';
+    const sub=[p.brand,p.subCategory].filter(Boolean).join(' · ');
+    const dv=(med&&p.price)?Math.round((p.price-med)/med*100):null;
+    const dvTxt = dv==null ? '' : `<span class="${dv>0?'dn':'up'}" style="color:${dv>0?'var(--red)':'var(--green)'}">중앙값 ${dv>0?'+':''}${dv}%</span>`;
     return `<div class="pcard ${i===state.selected?'on':''}" onclick="selectProduct(${i})">
       <div class="pthumb">${thumb}</div>
       <div class="pbody">
         <div class="prow1"><div class="pnm">${i+1}. ${p.name}</div><div class="pscore">${p.score}점</div></div>
-        <div class="pstar" title="평점·리뷰는 데모값">${stars} ${p.rating} <i>(${Number(p.reviews).toLocaleString()})</i></div>
-        <div class="pmeta"><span>가격 <b>${p.priceText||won(p.price)}</b></span><span class="up">▲${p.growth}%</span></div>
+        ${sub?`<div class="psub">${sub}</div>`:''}
+        <div class="pmeta"><span>가격 <b>${p.priceText||won(p.price)}</b></span>${dvTxt}</div>
       </div>
     </div>`;
   }).join('');
@@ -832,7 +867,8 @@ function renderKpis(){
     ['🎯 기회 점수', (p.score??'–')+'<small> /100</small>', `<span class="pill ${p.score>=75?'g':'a'}">${p.score>=75?'높음':p.score>=60?'관심':'보류'}</span> 매물수 기준`, 'b'],
     ['🛒 네이버 매물 수', state.total!=null?fmtK(state.total):'–', liveTag, ''],
     ['💰 가격대(중앙값)', won(med), liveTag, ''],
-    ['⭐ 평균 평점', (p.rating??'–')+'<small> /5</small>', '<span class="pill a">데모</span>', ''],
+    // 평점은 네이버 API 미제공 → 실제로 받는 최저가(진입 하한)로 대체
+    ['🏷️ 최저가', prices.length?won(prices[0]):'–', liveTag, ''],
     ['⚔️ 경쟁 강도', cl, `<span class="pill ${cc}">${state.live?'매물수 기준':'데모'}</span>`, ''],
     ['📦 시장 규모', sizeLabel(state.total), liveTag, ''],
   ];
@@ -1001,6 +1037,7 @@ async function scanDiscovery(scope, onProgress){
     if(!(j&&j.success&&Array.isArray(j.data)&&j.data.length)) return null;
     const ps=j.data.map(x=>x.price||x.priceLow||0).filter(Boolean).sort((a,b)=>a-b);
     const med=ps.length?ps[Math.floor(ps.length/2)]:0;
+    snapSave(job.kw, j.total, med);              // 스캔 1회 = 32개 키워드 적립
     const sc=discoveryScore(job.rel, j.total, med);
     return { kw:job.kw, cat:job.cat, mom:job.mom, rel:job.rel, total:j.total, med, top:(j.data[0]&&j.data[0].name)||'', ...sc };
   });
@@ -1174,7 +1211,14 @@ function searchSupplier(){
 }
 
 // ── 라인 차트(스파크) 생성
-function spark(el, vals, color){
+// 데이터가 아직 없을 때 가짜 선을 그리지 않고 사유를 적는다
+function sparkEmpty(el, msg){
+  const node=document.getElementById(el); if(!node) return;
+  node.innerHTML=`<div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;
+    font-size:11px;line-height:1.5;color:var(--muted);padding:8px">${msg}</div>`;
+}
+// partialLast=true → 마지막 점이 '집계 중'이라 점선+빈 원으로 구분해 그린다
+function spark(el, vals, color, partialLast){
   const node=document.getElementById(el); if(!node) return;   // 탭 전환 시 요소 없으면 무시
   // 4:3 viewBox · preserveAspectRatio=none → 셀 크기에 비례해 늘어남(반응형)
   const W=200, H=112, padX=14, padT=12, padB=12;
@@ -1185,23 +1229,35 @@ function spark(el, vals, color){
   const area=`M${pts[0][0]} ${H-padB} `+pts.map(p=>'L'+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ')+` L${pts[pts.length-1][0]} ${H-padB} Z`;
   let grid=''; for(let g=0;g<4;g++){ const y=padT+g*((H-padT-padB)/3); grid+=`<line x1="${padX}" y1="${y.toFixed(1)}" x2="${W-padX}" y2="${y.toFixed(1)}" stroke="#EEF0F5" stroke-width="0.8" vector-effect="non-scaling-stroke"/>`; }
   const lp=pts[pts.length-1];
+  // 집계 중인 마지막 구간은 확정값과 섞이면 안 되므로 실선에서 떼어 점선으로 그린다
+  let lineSvg;
+  if(partialLast && pts.length>=2){
+    const solid=pts.slice(0,-1).map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+    const pv=pts[pts.length-2];
+    lineSvg=`<path d="${solid}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <path d="M${pv[0].toFixed(1)} ${pv[1].toFixed(1)} L${lp[0].toFixed(1)} ${lp[1].toFixed(1)}" fill="none" stroke="${color}" stroke-width="2.4" stroke-dasharray="3 3" stroke-opacity=".55" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  } else {
+    lineSvg=`<path d="${line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;
+  }
   document.getElementById(el).innerHTML=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
     <defs><linearGradient id="g_${el}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${color}" stop-opacity=".20"/><stop offset="1" stop-color="${color}" stop-opacity="0"/>
     </linearGradient></defs>
     ${grid}
-    <path d="${area}" fill="url(#g_${el})"/>
-    <path d="${line}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-    <circle cx="${lp[0].toFixed(1)}" cy="${lp[1].toFixed(1)}" r="3.4" fill="#fff" stroke="${color}" stroke-width="2.4" vector-effect="non-scaling-stroke"/>
+    <path d="${area}" fill="url(#g_${el})" ${partialLast?'opacity=".72"':''}/>
+    ${lineSvg}
+    <circle cx="${lp[0].toFixed(1)}" cy="${lp[1].toFixed(1)}" r="3.4" fill="#fff" stroke="${partialLast?'#9AA1AE':color}" stroke-width="2.4" ${partialLast?'stroke-dasharray="2 2"':''} vector-effect="non-scaling-stroke"/>
   </svg>`;
 }
 // 추이 차트: 검색량=카테고리 DataLab 실데이터, 리뷰/판매=데모(실원천 없음)
-function setAxis(id, pts){
+function setAxis(id, pts, lastIsPartial){
   const el=document.getElementById(id); if(!el)return;
   const monthly = state.period==='monthly'||state.period==='yearly';
-  el.innerHTML=pts.map(p=>{ const d=(p.period||''); let lbl='';
+  el.innerHTML=pts.map((p,i)=>{ const d=(p.period||''); let lbl='';
     if(monthly){ const m=d.slice(5,7); lbl=m?(+m)+'월':''; }
     else if(d.length>=10){ lbl=(+d.slice(5,7))+'/'+(+d.slice(8,10)); }   // 일/주: M/D
+    // 집계 중인 마지막 구간은 확정값이 아님을 축에서도 알린다
+    if(lastIsPartial && i===pts.length-1) return `<span style="color:var(--muted)" title="아직 집계 중인 구간이라 확정값이 아닙니다">${lbl}*</span>`;
     return `<span>${lbl}</span>`; }).join('');
 }
 // 일/주/월/년 전환 — 해당 기간으로 트렌드 재조회
@@ -1216,22 +1272,46 @@ async function setPeriod(p){
 }
 function renderCharts(){
   const tag=document.getElementById('ch1tag');
+  // ① 검색량 추이 — DataLab 실데이터. 집계 중인 마지막 구간은 점선 처리
   if(state.trend && state.trend.length>=2){
+    const partial = state.trend.length !== trimPartial(state.trend).length;
     const pts=state.trend.slice(-6);
-    spark('ch1', pts.map(p=>+p.ratio), '#4F46E5');
-    setAxis('ax1', pts);
-    if(tag){ tag.className='pill g'; tag.style.fontSize='8px'; tag.textContent=(state.trendKw?'🔎검색어·':'분야·')+'DataLab '+(state.trendCat||''); }
-    // 리뷰/판매는 트렌드 모양을 따르되 데모(스케일만 다르게)
-    const base=pts.map(p=>+p.ratio);
-    spark('ch2', base.map((v,i)=>Math.round(v*120 + i*40)), '#16A34A');
-    spark('ch3', base.map((v,i)=>Math.round(v*0.9 + i*3)), '#7C3AED');
-    setAxis('ax2', pts); setAxis('ax3', pts);
+    const lastIsPartial = partial && pts[pts.length-1]===state.trend[state.trend.length-1];
+    spark('ch1', pts.map(p=>+p.ratio), '#4F46E5', lastIsPartial);
+    setAxis('ax1', pts, lastIsPartial);
+    if(tag){ tag.className='pill g'; tag.style.fontSize='8px';
+      // 검색어 단위 데이터가 없어 분야로 폴백한 경우를 명확히 구분한다
+      tag.textContent=(state.trendKw?'🔎 검색어 ':'📂 분야 전체 ')+(state.trendCat||''); }
   } else {
-    if(tag){ tag.className='pill a'; tag.style.fontSize='8px'; tag.textContent='데모'; }
-    spark('ch1',[10000,13000,19000,30000,46000,58000],'#4F46E5');
-    spark('ch2',[3000,4100,5600,7200,9400,12000],'#16A34A');
-    spark('ch3',[10,14,19,26,33,40],'#7C3AED');
+    if(tag){ tag.className='pill a'; tag.style.fontSize='8px'; tag.textContent='데이터 없음'; }
+    sparkEmpty('ch1','검색량 데이터를 불러오지 못했습니다.');
   }
+  // ②③ 매물수·가격 추이 — 우리가 매일 적립한 실측 스냅샷
+  const kw=state.query;
+  const ser=snapSeries(kw);
+  const t2=document.getElementById('ch2tag'), t3=document.getElementById('ch3tag');
+  if(ser.length>=2){
+    const s=ser.slice(-14);
+    const badge=`실측 ${s.length}일`;
+    if(t2){ t2.className='pill g'; t2.textContent=badge; }
+    if(t3){ t3.className='pill g'; t3.textContent=badge; }
+    spark('ch2', s.map(r=>r.t), '#16A34A');
+    spark('ch3', s.map(r=>r.m||0), '#7C3AED');
+    const ax=s.map(r=>({period:r.d}));
+    setAxisDays('ax2', ax); setAxisDays('ax3', ax);
+  } else {
+    const msg=`오늘 1일치만 적립됨.<br>내일 다시 조회하면 추이가 그려집니다.<br><span style="color:var(--muted)">(네이버 API가 리뷰수·판매량을 주지 않아<br>실제로 받을 수 있는 매물수·가격으로 대체)</span>`;
+    if(t2){ t2.className='pill a'; t2.textContent='적립 1일차'; }
+    if(t3){ t3.className='pill a'; t3.textContent='적립 1일차'; }
+    sparkEmpty('ch2', msg); sparkEmpty('ch3', msg);
+    const a2=document.getElementById('ax2'), a3=document.getElementById('ax3');
+    if(a2)a2.innerHTML=''; if(a3)a3.innerHTML='';
+  }
+}
+// 일자 축(M/D) — 스냅샷 시계열용
+function setAxisDays(id, pts){
+  const el=document.getElementById(id); if(!el)return;
+  el.innerHTML=pts.map(p=>{ const d=p.period||''; return `<span>${d.length>=10?(+d.slice(5,7))+'/'+(+d.slice(8,10)):''}</span>`; }).join('');
 }
 
 // ===================== ④ 리뷰/키워드 분석 (P2 · 무료·LLM 미사용) =====================
