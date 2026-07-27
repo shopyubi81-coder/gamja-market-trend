@@ -500,12 +500,28 @@ const CAT_MATCH = [
   [/선풍기|이어폰|가전|충전|배터리|노트북|키보드|모니터|tv|스피커|청소기|드론|카메라/i,'디지털/가전'],
   [/캠핑|등산|낚시|자전거|골프|러닝|요가|텐트|아웃도어|스포츠|레저/i,'스포츠/레저'],
   [/원피스|셔츠|팬츠|신발|샌들|가방|패션|의류|코트|자켓/i,'패션의류'],
-  [/선크림|쿠션|세럼|클렌징|화장품|마스카라|립|스킨|토너|미용/i,'화장품/미용'],
+  [/선크림|쿠션|세럼|클렌징|화장품|마스카라|립|스킨|토너|미용|두피|스케일러|에센스|미스트|마스크팩|팩트|샴푸/i,'화장품/미용'],
   [/수납|조명|러그|커튼|가구|인테리어|침대|소파|책상|선반/i,'가구/인테리어'],
   [/이유식|기저귀|유아|아기|육아|분유|아동/i,'출산/육아'],
-  [/과일|간편식|간식|밀키트|식품|건강|영양제|커피|음료/i,'식품'],
+  [/과일|간편식|간식|밀키트|식품|건강|영양제|커피|음료|젤리|쉐이크|콜드브루|견과|이온/i,'식품'],
 ];
-function matchCat(q){ for(const [re,c] of CAT_MATCH) if(re.test(q)) return c; return '디지털/가전'; }
+// 발굴 시드 키워드는 분야가 확정적이므로 정규식보다 우선한다.
+// (예전엔 '두피 스케일러'가 어느 규칙에도 안 걸려 기본값 디지털/가전으로 잘못 매칭됐다)
+let _kw2cat=null;
+function kw2cat(){
+  if(_kw2cat) return _kw2cat;
+  _kw2cat={};
+  try{ for(const c in SEED_KW) SEED_KW[c].forEach(k=>{ _kw2cat[k]=c; }); }catch(e){}
+  return _kw2cat;
+}
+function matchCat(q){
+  const t=String(q||'').trim();
+  const map=kw2cat();
+  if(map[t]) return map[t];                                   // 시드 키워드 완전 일치
+  for(const k in map) if(k.length>=3 && t.includes(k)) return map[k];   // 상품명에 시드가 포함된 경우
+  for(const [re,c] of CAT_MATCH) if(re.test(t)) return c;
+  return '디지털/가전';
+}
 
 // DataLab 카테고리 트렌드(월간 실데이터) 로드 → 검색량 추이에 사용
 async function loadTrend(){
