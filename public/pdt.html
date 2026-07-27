@@ -278,6 +278,11 @@
   .ov{ position:fixed; inset:0; background:rgba(16,24,40,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
   .ov.on{ display:flex; }
   .modal{ background:#fff; border-radius:16px; width:min(560px,100%); max-height:88vh; overflow:auto; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal.wide{ width:min(920px,100%); }
+  /* 좁은 화면에서 표가 한 글자씩 세로로 무너지지 않게 — 최소폭 + 가로 스크롤 */
+  .ctab-wrap{ overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -2px; }
+  .ctab-wrap .ctab{ min-width:660px; }
+  .ctab td.nm{ min-width:132px; }
   .modal-h{ display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--line); }
   .modal-h b{ font-size:15px; } .modal-x{ cursor:pointer; font-size:18px; color:var(--sub); border:none; background:none; }
   .modal-b{ padding:16px 18px; }
@@ -890,8 +895,8 @@ async function openCategoryOverview(){
     </tr>`;
   }).join('');
   showModal('📈 분야 분석·트렌드 · 지금 뜨는/지는 분야', `<div class="tabnote" style="padding:0 0 8px">네이버 DataLab 7대 분야 · 증감률 순 — 오늘 어느 분야를 팔지 한눈에 (트렌드+가격대+신호)</div>
-    <table class="ctab"><thead><tr><th>분야</th><th>검색지수</th><th>상대강도</th><th>대표 가격대</th><th>신호</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="tabnote" style="padding:10px 0 0;line-height:1.6">DataLab 지수는 조회 구간 최댓값을 100으로 정규화해 <b>7개 분야가 전부 하락</b>으로 나옵니다(실측 % 참고). 그래서 시장 공통 하락분(분야 중앙값)을 뺀 <b>상대강도(%p)</b>로 비교합니다. 집계 중인 이번 달은 제외.</div>`, 'catOv');
+    <div class="ctab-wrap"><table class="ctab"><thead><tr><th>분야</th><th>검색지수</th><th>상대강도</th><th>대표 가격대</th><th>신호</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="tabnote" style="padding:10px 0 0;line-height:1.6">DataLab 지수는 조회 구간 최댓값을 100으로 정규화해 <b>7개 분야가 전부 하락</b>으로 나옵니다(실측 % 참고). 그래서 시장 공통 하락분(분야 중앙값)을 뺀 <b>상대강도(%p)</b>로 비교합니다. 집계 중인 이번 달은 제외.</div>`, 'catOv', 'wide');
   // 대표 가격대 lazy 채우기(병렬) — 각 분야 대표 키워드 검색 중앙값
   if(cfgOK) cats.forEach((c,i)=>{ const kw=CAT_REPKW[c.name]||c.name;
     afetch(`/api/naver/search?q=${encodeURIComponent(kw)}&display=10`).then(r=>r.json()).then(j=>{
@@ -1060,9 +1065,9 @@ function renderDiscovery(rows, scope, ts){
   }).join('');
 
   showModal('🎯 오늘의 발굴 · 지금 볼 만한 후보 TOP 20', head + `
-    <table class="ctab"><thead><tr>
+    <div class="ctab-wrap"><table class="ctab"><thead><tr>
       <th>#</th><th>키워드</th><th>발굴점수</th><th>분야 상대강도</th><th>매물수</th><th>가격중앙값</th><th>신호</th><th></th>
-    </tr></thead><tbody>${body}</tbody></table>
+    </tr></thead><tbody>${body}</tbody></table></div>
     <div class="tabnote" style="padding:10px 0 0;line-height:1.65">
       <b>점수 구성</b> — <span style="color:var(--primary)">■</span> 트렌드 35 (분야 상대강도) ·
       <span style="color:var(--green)">■</span> 경쟁 여유 40 (네이버 매물수) ·
@@ -1070,14 +1075,14 @@ function renderDiscovery(rows, scope, ts){
       <b>분야 상대강도란</b> — DataLab 지수는 조회 구간 최댓값을 100으로 정규화해 <b>7개 분야가 전부 하락으로 나옵니다</b>(실측 % 참고).
       그래서 시장 공통 하락분(분야 중앙값)을 뺀 <b>상대적으로 잘 버티는 정도(%p)</b>를 씁니다. 집계 중인 이번 달은 제외하고 완결월끼리 비교합니다.<br>
       ※ 성공확률이 아니라 <b>먼저 볼 순서</b>입니다. 가중치는 아직 성과로 검증되지 않은 고정 휴리스틱이며, 판매 성과가 쌓이면 보정할 예정입니다.
-    </div>`, 'discOv');
+    </div>`, 'discOv', 'wide');
 }
 
 // 공통 모달(동적 생성)
-function showModal(title, bodyHtml, id){
+function showModal(title, bodyHtml, id, cls){
   closeModal(id);
   const ov=document.createElement('div'); ov.className='ov on'; ov.id=id;
-  ov.innerHTML=`<div class="modal"><div class="modal-h"><b>${title}</b><button class="modal-x" onclick="closeModal('${id}')">✕</button></div><div class="modal-b">${bodyHtml}</div></div>`;
+  ov.innerHTML=`<div class="modal ${cls||''}"><div class="modal-h"><b>${title}</b><button class="modal-x" onclick="closeModal('${id}')">✕</button></div><div class="modal-b">${bodyHtml}</div></div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) closeModal(id); });
   document.body.appendChild(ov);
 }
