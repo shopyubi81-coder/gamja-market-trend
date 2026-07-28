@@ -378,8 +378,8 @@ const SNAPSHOT_SEEDS: string[] = [
   "간편식","냉동 과일","콜드브루","단백질 쉐이크","밀키트","견과류","이온음료","곤약젤리",
 ];
 
-// 크론은 UTC 22:40에 돌지만 저장 날짜는 KST 기준이어야 한다(= 그날 아침 7:40)
-const todayKST = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+// 저장 날짜는 KST 기준(크론이 UTC 22:40에 돌아도 그날 아침으로 기록)
+// → 위 '일일 종합 보고서' 섹션의 todayKST()를 그대로 재사용한다.
 
 function medianPrice(items: any[]) {
   const ps = items.map((x: any) => x.price || x.priceLow || 0)
