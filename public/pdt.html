@@ -358,7 +358,12 @@
         <span class="area-tag"><span class="cir">1</span> 상품 탐색 영역</span>
       </div>
       <div class="card-b">
-        <select class="sel"><option>경쟁 필터 · 1,250개 매물</option></select>
+        <select class="sel" id="plistFilter" onchange="setPFilter(this.value)">
+          <option value="all">전체 상품</option>
+          <option value="below">중앙값 이하만 (저가 구간)</option>
+          <option value="above">중앙값 초과만 (고가 구간)</option>
+        </select>
+        <div id="plistNote" style="font-size:10.5px;color:var(--muted);font-weight:600;margin:5px 2px 7px"></div>
         <div id="plist"></div>
       </div>
     </section>
@@ -852,19 +857,31 @@ function renderAIReport(){
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">${regPanelHTML()}</div>`;
 }
 
+function setPFilter(v){ state.pfilter=v; state.selected=0; paint(); }
 function renderProducts(){
   const el=document.getElementById('plist'); if(!el)return;
-  const all=state.products, n=all.length;
+  const med0=state.med||0;
+  // 실제로 동작하는 필터 (예전엔 '경쟁 필터 · 1,250개 매물'이라는 고정 문구만 있고 아무 기능이 없었음)
+  const f=state.pfilter||'all';
+  const all=(f==='below'&&med0) ? state.products.filter(p=>p.price&&p.price<=med0)
+          : (f==='above'&&med0) ? state.products.filter(p=>p.price&&p.price>med0)
+          : state.products;
+  const n=all.length;
+  const note=document.getElementById('plistNote');
+  if(note) note.innerHTML = state.live
+    ? `이 키워드 전체 매물 <b>${state.total!=null?state.total.toLocaleString():'-'}개</b> 중 상위 <b>${state.products.length}개</b>를 가져와 분석${f!=='all'?` · 필터 적용 <b>${n}개</b>`:''}`
+    : '데모 데이터';
   const vis = state.showAll ? all : all.slice(0, PLIST_MIN);
   // 평점·리뷰수·성장률은 네이버 검색 API가 주지 않는다(확인함) → 지어내지 않고
   // 실제로 받는 값(브랜드·세부카테고리·가격·중앙값 대비)만 보여준다.
   const med=state.med||0;
   let html=vis.map((p,i)=>{
+    const oi=state.products.indexOf(p);   // 필터를 걸어도 선택은 원본 인덱스를 써야 한다
     const thumb=p.image?`<img src="${p.image}" style="width:100%;height:100%;object-fit:cover;border-radius:9px" onerror="this.parentNode.textContent='🌀'">`:'🌀';
     const sub=[p.brand,p.subCategory].filter(Boolean).join(' · ');
     const dv=(med&&p.price)?Math.round((p.price-med)/med*100):null;
     const dvTxt = dv==null ? '' : `<span class="${dv>0?'dn':'up'}" style="color:${dv>0?'var(--red)':'var(--green)'}">중앙값 ${dv>0?'+':''}${dv}%</span>`;
-    return `<div class="pcard ${i===state.selected?'on':''}" onclick="selectProduct(${i})">
+    return `<div class="pcard ${oi===state.selected?'on':''}" onclick="selectProduct(${oi})">
       <div class="pthumb">${thumb}</div>
       <div class="pbody">
         <div class="prow1"><div class="pnm">${i+1}. ${p.name}</div><div class="pscore">${p.score}점</div></div>
@@ -899,7 +916,8 @@ function renderKpis(){
     ['💰 가격대(중앙값)', won(med), liveTag, ''],
     // 평점은 네이버 API 미제공 → 실제로 받는 최저가(진입 하한)로 대체
     ['🏷️ 최저가', prices.length?won(prices[0]):'–', liveTag, ''],
-    ['⚔️ 경쟁 강도', cl, `<span class="pill ${cc}">${state.live?'매물수 기준':'데모'}</span>`, ''],
+    // 경쟁 강도·시장 규모는 '이 키워드의 전체 매물 수' 하나로 판정한다(상품별 값이 아님)
+    ['⚔️ 경쟁 강도', cl, `<span class="pill ${cc}" title="네이버 등록 매물 20만개 초과=높음 / 6만~20만=중간 / 6만 이하=낮음">매물 ${state.total!=null?fmtK(state.total):'-'}개</span>`, ''],
     ['📦 시장 규모', sizeLabel(state.total), liveTag, ''],
   ];
   el.innerHTML=cards.map(c=>`<div class="kpi"><div class="kl">${c[0]}</div><div class="kv ${c[3]}">${c[1]}</div><div class="ks">${c[2]}</div></div>`).join('');
@@ -1316,14 +1334,37 @@ function renderSourcing(rows){
   const order={'🟢 지금 소싱':0,'🟡 준비 시작':1,'⚪ 이르다':2,'🔴 이미 늦음':3,'연중 상시':4};
   rows.forEach(r=>{ const v=sourcingVerdict(r.amp,r.wks); r._v=v; r._o=order[v[0]]??9; });
   rows.sort((a,b)=> a._o-b._o || a.wks-b.wks);
+  const nowM=new Date().getMonth()+1;
   const body=rows.map(r=>{
     const esc=r.kw.replace(/'/g,'');
+    // 왜 지금 준비해야 하는지 — 월별 지수와 리드타임 역산을 그대로 보여준다
+    const pr=r.prof||{};
+    const mx=Math.max(...Object.values(pr).map(Number).filter(isFinite), 1);
+    const bars=Array.from({length:12},(_,i)=>{
+      const m=i+1, v=Number(pr[m]||0), h=Math.max(2, Math.round(v/mx*22));
+      const isPeak=m===r.peak, isNow=m===nowM;
+      return `<span title="${m}월 지수 ${v.toFixed(0)}" style="display:inline-block;width:7px;height:${h}px;
+        background:${isPeak?'var(--red)':isNow?'var(--primary)':'var(--line)'};border-radius:1px;vertical-align:bottom"></span>`;
+    }).join('');
+    const nowV=Number(pr[nowM]||0), pkV=Number(pr[r.peak]||0);
+    const mult = nowV>0 ? (pkV/nowV).toFixed(1) : null;
+    const PREP=5;   // 소싱 발주~입고 4주 + 상세페이지·등록 1주
+    const startIn = r.wks - PREP;
+    const why = r.amp<1.6
+      ? '계절 편차가 작아 시점보다 가격·경쟁이 중요합니다'
+      : `${r.peak}월 검색량이 지금(${nowM}월)의 <b>${mult?mult+'배':'수 배'}</b>로 오릅니다.
+         준비에 약 <b>${PREP}주</b>(소싱 4주 + 등록 1주)가 걸리니,
+         ${startIn<=0 ? `<b style="color:var(--red)">이미 시작했어야 하는 시점</b>입니다`
+                      : `<b>${startIn}주 안</b>에 발주를 넣어야 피크를 맞춥니다`}.`;
     return `<tr>
       <td class="nm" style="font-weight:800">${r.kw}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
-      <td style="color:${r._v[1]};font-weight:800;white-space:nowrap">${r._v[0]}<div style="font-size:10px;color:var(--muted);font-weight:600;white-space:normal;max-width:150px">${r._v[2]}</div></td>
+      <td style="color:${r._v[1]};font-weight:800;white-space:nowrap">${r._v[0]}</td>
       <td style="text-align:center"><b style="font-size:15px">${r.peak}월</b><div style="font-size:10.5px;color:var(--muted)">피크</div></td>
       <td style="text-align:center"><b style="font-size:15px">${r.wks}</b><div style="font-size:10.5px;color:var(--muted)">주 남음</div></td>
-      <td style="text-align:center">${r.amp}배<div style="font-size:10.5px;color:var(--muted)">진폭</div></td>
+      <td style="white-space:normal;min-width:250px">
+        <div style="display:flex;gap:2px;align-items:flex-end;height:24px;margin-bottom:4px">${bars}</div>
+        <div style="font-size:10.5px;color:var(--sub);line-height:1.5">${why}</div>
+      </td>
       <td>${r.total!=null?fmtK(r.total):'-'}</td>
       <td>${r.med?won(r.med):'-'}</td>
       <td><button class="seln" onclick="document.getElementById('q').value='${esc}';doSearch();closeModal('srcOv')">분석 →</button></td>
@@ -1331,8 +1372,12 @@ function renderSourcing(rows){
   }).join('');
   showModal('📅 소싱 타이밍 · 지금 준비해야 할 것', head+`
     <div class="ctab-wrap"><table class="ctab"><thead><tr>
-      <th>품목</th><th>판정</th><th>피크</th><th>남은 기간</th><th>계절성</th><th>매물수</th><th>가격중앙값</th><th></th>
+      <th>품목</th><th>판정</th><th>피크</th><th>남은 기간</th><th>왜 지금인가 (월별 검색량)</th><th>매물수</th><th>가격중앙값</th><th></th>
     </tr></thead><tbody>${body}</tbody></table></div>
+    <div class="tabnote" style="padding:8px 0 0;line-height:1.6">
+      막대는 <b>최근 3년 월별 평균 검색량</b>입니다 — <span style="color:var(--red)">■</span> 피크월,
+      <span style="color:var(--primary)">■</span> 이번 달. 준비 기간은 <b>소싱 4주 + 등록 1주 = 5주</b>로 가정했습니다.
+    </div>
     <div class="tabnote" style="padding:10px 0 0;line-height:1.65">
       <b>판정 기준</b> — 피크까지 <b>2주 이하</b>면 이미 늦음, <b>3~6주</b>면 지금 소싱, <b>7~12주</b>면 준비 시작.
       진폭 1.6배 미만은 계절성이 약해 '연중 상시'로 분류합니다.<br>
