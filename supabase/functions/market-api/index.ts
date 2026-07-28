@@ -457,6 +457,109 @@ async function collectSnapshots(limit: number) {
   return { date: todayKST(), requested: kws.length, saved: ok, failed: fail };
 }
 
+// ===== 발굴 후보 풀 (쿠팡 실시간 인기 → 네이버 분류로 정제) =====
+// 시드 56개 고정이라 그 밖의 상품은 후보가 될 수 없던 한계를 없앤다.
+// 핵심: 한국어 형태소 분석 없이 '네이버 subCategory'를 정규화 장치로 쓴다.
+//   햇반→일반즉석밥 / 제주삼다수→생수 / 탐사→응고형모래 / 베이비파우더향→바디클렌저
+// 거친 토큰을 넣어도 네이버가 브랜드명·속성어를 실제 분류명으로 바꿔준다.
+
+const POOL_NOISE = /\[[^\]]*\]|<[^>]*>|★[^★]*★|\([^)]*\)/g;
+
+// 상품명 → 거친 후보 토큰(정교할 필요 없음, 네이버가 정제하므로)
+function roughTokens(name: string): string[] {
+  const s = name.replace(POOL_NOISE, " ").replace(/[+/,·|]/g, " ");
+  const toks = s.split(/\s+/).filter((t) =>
+    t && t.length >= 2 && t.length <= 12 &&
+    /^[가-힣]+$/.test(t) &&                       // 한글 토큰만
+    !/^[0-9]/.test(t)
+  );
+  if (!toks.length) return [];
+  const out = [toks[toks.length - 1]];             // 한국어 상품명은 보통 끝이 품목
+  if (toks.length >= 2) out.push(toks[toks.length - 2]);
+  return out;
+}
+
+// 토큰 → 네이버 대표 분류명 (일관성 검사 포함)
+async function normalizeByNaver(token: string) {
+  const shop = await naverShop(token, 10, "sim");
+  const items = (shop.items || []).map((it: any) => mapShopItem(it, "", token));
+  if (!items.length) return null;
+  const counts: Record<string, number> = {};
+  for (const it of items) {
+    const sub = String(it.subCategory || "").split(">").pop()?.trim() || "";
+    if (sub) counts[sub] = (counts[sub] || 0) + 1;
+  }
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (!top) return null;
+  const dominance = top[1] / items.length;
+  if (dominance < 0.8) return null;                // 분류가 흩어지면 실제 품목어가 아님
+  const name = top[0].split("/")[0].trim();        // "일반즉석밥/잡곡밥" → "일반즉석밥"
+  if (!name || name.length < 2 || name.length > 14) return null;
+  return { name, path: top[0], total: shop.total || 0, med: medianPrice(items) };
+}
+
+async function poolUpsert(rows: any[]) {
+  if (!SB_URL || !SB_SERVICE_KEY || !rows.length) return;
+  await fetch(`${SB_URL}/rest/v1/keyword_track?on_conflict=keyword`, {
+    method: "POST",
+    headers: {
+      apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}`,
+      "Content-Type": "application/json", Prefer: "resolution=merge-duplicates",
+    },
+    body: JSON.stringify(rows),
+  });
+}
+
+// 쿠팡 인기 상품 수집 → 토큰 → 네이버 정규화 → 후보 풀 저장
+async function refreshDiscoveryPool() {
+  const products: string[] = [];
+  try {
+    const gb = await coupangCall(`${CPATH}/goldbox`, "");
+    (gb.data || []).forEach((p: any) => p?.productName && products.push(p.productName));
+  } catch (_) { /* 골드박스 실패해도 카테고리로 진행 */ }
+  for (const key of Object.keys(COUPANG_CATEGORY)) {
+    try {
+      const cat = COUPANG_CATEGORY[key];
+      const res = await coupangCall(`${CPATH}/bestcategories/${cat.id}`, "limit=20");
+      (res.data || []).forEach((p: any) => p?.productName && products.push(p.productName));
+    } catch (_) { /* 개별 카테고리 실패는 건너뜀 */ }
+  }
+
+  const tokens = new Set<string>();
+  products.forEach((n) => roughTokens(n).forEach((t) => tokens.add(t)));
+
+  const seen = new Set<string>(SNAPSHOT_SEEDS);
+  const rows: any[] = [];
+  const now = new Date().toISOString();
+  for (const t of [...tokens].slice(0, 120)) {          // 네이버 호출 상한
+    try {
+      const n = await normalizeByNaver(t);
+      if (!n) continue;
+      if (seen.has(n.name)) continue;                    // 시드/중복 제외
+      if (n.total < 1000 || n.total > 3000000) continue; // 너무 희소하거나 너무 일반적
+      seen.add(n.name);
+      rows.push({
+        keyword: n.name, source: "coupang", naver_cat: n.path,
+        total: n.total, med: n.med, last_seen: now,
+      });
+    } catch (_) { /* 개별 실패 무시 */ }
+  }
+  await poolUpsert(rows);
+  return { products: products.length, tokens: tokens.size, added: rows.length,
+           sample: rows.slice(0, 12).map((r) => `${r.keyword}(${r.total})`) };
+}
+
+async function getDiscoveryPool(limit: number) {
+  if (!SB_URL || !SB_SERVICE_KEY) return [];
+  const r = await fetch(
+    `${SB_URL}/rest/v1/keyword_track?source=eq.coupang&select=keyword,naver_cat,total,med` +
+    `&order=last_seen.desc&limit=${limit}`,
+    { headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` } },
+  );
+  const rows = await r.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
 async function getLatestReport() {
   if (!SB_URL || !SB_SERVICE_KEY) return null;
   const r = await fetch(`${SB_URL}/rest/v1/daily_report?select=data&order=date.desc&limit=1`, {
@@ -621,6 +724,19 @@ Deno.serve(async (req) => {
       const limit = Math.min(parseInt(q.get("limit") || "120"), 250);
       const r = await collectSnapshots(limit);
       return json({ success: true, ...r });
+    }
+
+    // ===== 발굴 후보 풀 =====
+    if (path === "/api/discovery/pool/refresh") {
+      if (!naverConfigured()) return json({ error: "NAVER_API_NOT_CONFIGURED" }, 503);
+      if (!coupangConfigured()) return json({ error: "COUPANG_API_NOT_CONFIGURED" }, 503);
+      const r = await refreshDiscoveryPool();
+      return json({ success: true, ...r });
+    }
+    if (path === "/api/discovery/pool") {
+      const limit = Math.min(parseInt(q.get("limit") || "80"), 200);
+      const rows = await getDiscoveryPool(limit);
+      return json({ success: true, count: rows.length, data: rows });
     }
 
     // ===== 수집 상태 점검 (크론이 조용히 죽었는지 확인용) =====
