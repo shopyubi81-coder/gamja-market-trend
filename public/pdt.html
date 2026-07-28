@@ -302,7 +302,7 @@
       <div class="mark">PDT</div>
       <div>
         <div class="nm">Product Discovery Terminal</div>
-        <div class="sub">감자마켓 MD 상품 발굴 터미널</div>
+        <div class="sub">상품 발굴 · 소싱 타이밍 터미널</div>
       </div>
     </div>
     <div class="hd-search">
@@ -315,7 +315,7 @@
       <div class="hd-ic" onclick="openWatch()"><span class="ico">⭐</span>관심상품</div>
       <div class="hd-user">
         <div class="av">👩</div>
-        <div><div class="un">MD 수아맘</div><div class="ur">감자마켓 MD님</div></div>
+        <div><div class="un">수아맘</div><div class="ur">셀러 · 개인사업자</div></div>
       </div>
     </div>
   </header>
@@ -327,6 +327,7 @@
     <aside class="col-rail card">
       <div class="rail-sec">
         <div class="rail-lbl">탐색</div>
+        <div class="rail-item disc" onclick="navMenu(this,'sourcing')"><span class="ic">📅</span> 소싱 타이밍 <span class="pill g" style="font-size:8px;margin-left:auto">선행</span></div>
         <div class="rail-item disc" onclick="navMenu(this,'discover')"><span class="ic">🎯</span> 오늘의 발굴 <span class="pill g" style="font-size:8px;margin-left:auto">AUTO</span></div>
         <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
         <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">📈</span> 분야 분석·트렌드</div>
@@ -474,7 +475,7 @@
 <script src="config.js"></script>
 <script>
 // ===================== 네이버 실데이터 연동 =====================
-const CFG = window.GAMJA_CONFIG || {};
+const CFG = window.PDT_CONFIG || window.GAMJA_CONFIG || {};
 const cfgOK = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && !/여기에/.test(CFG.SUPABASE_URL));
 const EDGE = CFG.EDGE_FUNCTION || 'market-api';
 const API  = cfgOK ? `${CFG.SUPABASE_URL}/functions/v1/${EDGE}` : '';
@@ -918,6 +919,7 @@ function railCat(el, kw){
 function navMenu(el, mode){
   document.querySelectorAll('.rail-item').forEach(x=>x.classList.remove('on')); el.classList.add('on');
   if(mode==='search'){ const q=document.getElementById('q'); q.focus(); q.select(); }
+  else if(mode==='sourcing'){ openSourcing(); }
   else if(mode==='discover'){ openDiscovery(); }
   else if(mode==='category'){ openCategoryOverview(); }
   else if(mode==='watch'){ openWatch(); }
@@ -1041,6 +1043,70 @@ async function runPool(items, limit, worker){
     while(idx<items.length){ const i=idx++; try{ out[i]=await worker(items[i],i); }catch(e){ out[i]=null; } }
   }));
   return out;
+}
+
+// ===================== 📅 소싱 타이밍 (계절 선행 발굴) =====================
+// 셀러는 '지금 뜨는 것'을 알아봐야 이미 늦다. 소싱·입고·상세페이지에 2~4주가 걸리므로
+// 피크가 오기 전에 준비를 시작해야 한다.
+// DataLab을 3년치 월별로 받아 계절 프로파일을 만들고, 피크까지 남은 주수를 계산한다.
+//   선풍기 = 7월 피크·진폭 44배 / 제습제 = 7월·7.3배 / 캠핑 = 10월·2.8배 (실측 확인)
+const SEASON_KEY='pdt_season';
+function seasonCacheGet(kw){
+  try{ const c=JSON.parse(localStorage.getItem(SEASON_KEY)||'{}');
+    const v=c[kw]; if(v && (Date.now()-v.ts) < 30*86400000) return v;   // 계절성은 잘 안 변함(30일 캐시)
+  }catch(e){}
+  return null;
+}
+function seasonCacheSet(kw, val){
+  try{ const c=JSON.parse(localStorage.getItem(SEASON_KEY)||'{}');
+    c[kw]={...val, ts:Date.now()};
+    const ks=Object.keys(c); if(ks.length>400) delete c[ks[0]];
+    localStorage.setItem(SEASON_KEY, JSON.stringify(c));
+  }catch(e){}
+}
+// 월별 평균 지수 → 피크월·진폭·현재 위치
+function seasonProfile(series){
+  if(!Array.isArray(series) || series.length<12) return null;
+  const m={};
+  series.forEach(x=>{ const mo=+String(x.period).slice(5,7); if(!mo) return;
+    (m[mo]=m[mo]||[]).push(+x.ratio||0); });
+  const prof={}; for(const k in m) prof[k]=m[k].reduce((a,b)=>a+b,0)/m[k].length;
+  const months=Object.keys(prof).map(Number);
+  if(months.length<10) return null;                 // 1년치가 안 되면 계절 판단 불가
+  let peak=months[0], low=months[0];
+  months.forEach(k=>{ if(prof[k]>prof[peak]) peak=k; if(prof[k]<prof[low]) low=k; });
+  const amp = prof[low]>0 ? prof[peak]/prof[low] : (prof[peak]>0?99:1);
+  return { prof, peak, low, amp:Math.round(amp*10)/10 };
+}
+// 피크까지 남은 주수 — 소싱 준비 시점 판단의 핵심
+function weeksToPeak(peakMonth){
+  const now=new Date();
+  const y=now.getFullYear();
+  let d=new Date(y, peakMonth-1, 15);              // 피크월 중순을 기준점으로
+  if(d < now) d=new Date(y+1, peakMonth-1, 15);    // 이미 지났으면 내년
+  return Math.round((d-now)/(7*86400000));
+}
+// 소싱 판정 — 리드타임 2~4주를 감안해 준비를 언제 시작할지
+function sourcingVerdict(amp, wks){
+  if(amp < 1.6) return ['연중 상시','var(--sub)','계절성이 약해 시점보다 가격·경쟁이 중요'];
+  if(wks <= 2)  return ['🔴 이미 늦음','var(--red)','피크가 코앞 — 지금 소싱하면 못 맞춤'];
+  if(wks <= 6)  return ['🟢 지금 소싱','var(--green)','리드타임 감안 시 지금이 준비 적기'];
+  if(wks <= 12) return ['🟡 준비 시작','var(--amber)','샘플·공급처 접촉을 시작할 시점'];
+  return ['⚪ 이르다','var(--sub)','아직 여유 — 관심목록에만 담아두기'];
+}
+async function seasonOf(kw, cat){
+  const c=seasonCacheGet(kw); if(c) return c;
+  if(!cfgOK) return null;
+  try{
+    const r=await afetch(`/api/naver/keywords?q=${encodeURIComponent(kw)}&cat=${encodeURIComponent(cat||matchCat(kw))}&period=yearly`);
+    if(!r.ok) return null;
+    const j=await r.json();
+    const p=seasonProfile(j&&j.data);
+    if(!p) return null;
+    const val={ peak:p.peak, low:p.low, amp:p.amp, prof:p.prof };
+    seasonCacheSet(kw, val);
+    return val;
+  }catch(e){ return null; }
 }
 
 const DISC_KEY='pdt_discovery';
@@ -1188,6 +1254,80 @@ function renderDiscovery(rows, scope, ts){
       그래서 시장 공통 하락분(분야 중앙값)을 뺀 <b>상대적으로 잘 버티는 정도(%p)</b>를 씁니다. 집계 중인 이번 달은 제외하고 완결월끼리 비교합니다.<br>
       ※ 성공확률이 아니라 <b>먼저 볼 순서</b>입니다. 가중치는 아직 성과로 검증되지 않은 고정 휴리스틱이며, 판매 성과가 쌓이면 보정할 예정입니다.
     </div>`, 'discOv', 'wide');
+}
+
+// ── 소싱 캘린더 — 후보들의 피크 시점을 계산해 '지금 준비할 것'을 앞에 놓는다
+async function openSourcing(force){
+  const head=(note)=>`
+    <div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+      셀러는 '지금 뜨는 것'을 보면 이미 늦습니다. 소싱·입고·상세페이지에 <b>2~4주</b>가 걸리므로 피크 전에 움직여야 합니다.<br>
+      DataLab <b>3년치 월별</b> 데이터로 품목별 피크 달을 찾아 <b>남은 주수</b>를 계산했습니다. ${note}
+    </div>`;
+  if(!cfgOK){ showModal('📅 소싱 타이밍', head('')+'<div class="tabnote">네이버 연결이 없어 실행할 수 없습니다.</div>','srcOv','wide'); return; }
+
+  // 발굴 결과를 재료로 쓴다(없으면 먼저 스캔)
+  let rows=(discCacheGet(state.discScope||'top')||{}).rows;
+  if(!rows || force){
+    showModal('📅 소싱 타이밍', head('')+`<div style="padding:14px 2px">
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:7px">후보 스캔 중…</div>
+      <div class="dsc-bar"><i id="srcBar0" style="width:0%"></i></div></div>`,'srcOv','wide');
+    try{ rows=await scanDiscovery(state.discScope||'top',(d,t)=>{
+      const b=document.getElementById('srcBar0'); if(b) b.style.width=Math.round(d/t*100)+'%'; });
+      discCacheSet(state.discScope||'top', rows);
+    }catch(e){ showModal('📅 소싱 타이밍', head('')+'<div class="tabnote">후보를 불러오지 못했습니다.</div>','srcOv','wide'); return; }
+  }
+  const cand=rows.slice(0,40);
+  showModal('📅 소싱 타이밍', head('')+`<div style="padding:14px 2px">
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:7px">계절 패턴 분석 중 <span id="srcN">0</span> / ${cand.length}</div>
+      <div class="dsc-bar"><i id="srcBar" style="width:0%"></i></div>
+      <div class="tabnote" style="padding:8px 0 0">품목마다 3년치를 조회합니다. 30~60초 걸립니다.</div>
+    </div>`,'srcOv','wide');
+
+  let done=0; const out=[];
+  await runPool(cand, 4, async(r)=>{
+    const s=await seasonOf(r.kw, r.cat);
+    done++;
+    const a=document.getElementById('srcN'), b=document.getElementById('srcBar');
+    if(a) a.textContent=done; if(b) b.style.width=Math.round(done/cand.length*100)+'%';
+    if(s) out.push({ ...r, ...s, wks:weeksToPeak(s.peak) });
+  });
+  if(!document.getElementById('srcOv')) return;
+  renderSourcing(out);
+}
+function renderSourcing(rows){
+  const head=`
+    <div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+      셀러는 '지금 뜨는 것'을 보면 이미 늦습니다. 소싱·입고·상세페이지에 <b>2~4주</b>가 걸리므로 피크 전에 움직여야 합니다.<br>
+      DataLab <b>3년치 월별</b> 데이터로 품목별 피크 달을 찾아 <b>남은 주수</b>를 계산했습니다.
+      <button class="seln" style="margin-left:6px" onclick="openSourcing(1)">🔄 다시 계산</button>
+    </div>`;
+  if(!rows.length){ showModal('📅 소싱 타이밍', head+'<div class="tabnote">계절 데이터를 확보한 후보가 없습니다.</div>','srcOv','wide'); return; }
+  // 계절성 있는 것 우선 + 피크가 가까운 순
+  const order={'🟢 지금 소싱':0,'🟡 준비 시작':1,'⚪ 이르다':2,'🔴 이미 늦음':3,'연중 상시':4};
+  rows.forEach(r=>{ const v=sourcingVerdict(r.amp,r.wks); r._v=v; r._o=order[v[0]]??9; });
+  rows.sort((a,b)=> a._o-b._o || a.wks-b.wks);
+  const body=rows.map(r=>{
+    const esc=r.kw.replace(/'/g,'');
+    return `<tr>
+      <td class="nm" style="font-weight:800">${r.kw}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
+      <td style="color:${r._v[1]};font-weight:800;white-space:nowrap">${r._v[0]}<div style="font-size:10px;color:var(--muted);font-weight:600;white-space:normal;max-width:150px">${r._v[2]}</div></td>
+      <td style="text-align:center"><b style="font-size:15px">${r.peak}월</b><div style="font-size:10.5px;color:var(--muted)">피크</div></td>
+      <td style="text-align:center"><b style="font-size:15px">${r.wks}</b><div style="font-size:10.5px;color:var(--muted)">주 남음</div></td>
+      <td style="text-align:center">${r.amp}배<div style="font-size:10.5px;color:var(--muted)">진폭</div></td>
+      <td>${r.total!=null?fmtK(r.total):'-'}</td>
+      <td>${r.med?won(r.med):'-'}</td>
+      <td><button class="seln" onclick="document.getElementById('q').value='${esc}';doSearch();closeModal('srcOv')">분석 →</button></td>
+    </tr>`;
+  }).join('');
+  showModal('📅 소싱 타이밍 · 지금 준비해야 할 것', head+`
+    <div class="ctab-wrap"><table class="ctab"><thead><tr>
+      <th>품목</th><th>판정</th><th>피크</th><th>남은 기간</th><th>계절성</th><th>매물수</th><th>가격중앙값</th><th></th>
+    </tr></thead><tbody>${body}</tbody></table></div>
+    <div class="tabnote" style="padding:10px 0 0;line-height:1.65">
+      <b>판정 기준</b> — 피크까지 <b>2주 이하</b>면 이미 늦음, <b>3~6주</b>면 지금 소싱, <b>7~12주</b>면 준비 시작.
+      진폭 1.6배 미만은 계절성이 약해 '연중 상시'로 분류합니다.<br>
+      ※ 피크 달은 최근 3년 <b>월별 평균</b>이라 특정 해의 이벤트(추석·블프 등 날짜 이동)까지 반영하지는 못합니다.
+    </div>`,'srcOv','wide');
 }
 
 // 공통 모달(동적 생성)
