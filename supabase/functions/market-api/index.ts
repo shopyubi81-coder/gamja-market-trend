@@ -141,14 +141,20 @@ function mapCoupangItem(p: any, catName: string) {
 }
 
 // ===== 네이버 공통 =====
+// ⚠️ 2026-07-28 정정: 기존 코드 매핑이 네이버 표준 ID 기준으로 한 칸씩 밀려 있었다.
+// 값은 진짜였지만 이름표가 잘못 붙어, 분야 트렌드·자동 발굴이 엉뚱한 분야를 가리켰다.
+// (예: '화장품/미용'으로 표시되던 50000003에 무선이어폰을 넣으면 13포인트가 나옴 = 실제 디지털/가전)
+// DataLab keywords 엔드포인트로 대표 키워드를 넣어 실증 확인 후 정정.
 const NAVER_CATEGORIES = [
+  { name: "패션의류", code: "50000000" },
+  { name: "패션잡화", code: "50000001" },
+  { name: "화장품/미용", code: "50000002" },
+  { name: "디지털/가전", code: "50000003" },
+  { name: "가구/인테리어", code: "50000004" },
+  { name: "출산/육아", code: "50000005" },
   { name: "식품", code: "50000006" },
-  { name: "화장품/미용", code: "50000003" },
-  { name: "패션의류", code: "50000001" },
-  { name: "가구/인테리어", code: "50000005" },
-  { name: "출산/육아", code: "50000002" },
   { name: "스포츠/레저", code: "50000007" },
-  { name: "디지털/가전", code: "50000004" },
+  { name: "생활/건강", code: "50000008" },
 ];
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -236,6 +242,9 @@ function mapShopItem(it: any, catName: string, kw: string) {
     priceText: lo ? `${lo.toLocaleString()}원` : "가격문의",
     priceRangeText: (hi && hi > lo) ? `${lo.toLocaleString()}~${hi.toLocaleString()}원` : (lo ? `${lo.toLocaleString()}원` : "가격문의"),
     category: catName,
+    // category1 = 네이버 최상위 분야. DataLab 분야명과 같은 체계라 분야 판정에 그대로 쓸 수 있다.
+    // (예전엔 버려서 프론트가 정규식으로 추측하다 우유·달걀까지 '디지털/가전'으로 오분류했음)
+    cat1: it.category1 || "",
     subCategory: [it.category2, it.category3, it.category4].filter(Boolean).join(" > "),
     brand: it.brand || it.maker || "", keyword: kw,
     image: it.image, link: it.link, productId: it.productId,
@@ -495,7 +504,13 @@ async function normalizeByNaver(token: string) {
   if (dominance < 0.8) return null;                // 분류가 흩어지면 실제 품목어가 아님
   const name = top[0].split("/")[0].trim();        // "일반즉석밥/잡곡밥" → "일반즉석밥"
   if (!name || name.length < 2 || name.length > 14) return null;
-  return { name, path: top[0], total: shop.total || 0, med: medianPrice(items) };
+  // 최상위 분야도 함께 기록 → 프론트가 추측 없이 분야를 확정할 수 있다.
+  // 마이그레이션 없이 기존 naver_cat 칸에 "분야 > 품목" 형태로 넣는다.
+  const c1: Record<string, number> = {};
+  for (const it of items) { const c = String(it.cat1 || ""); if (c) c1[c] = (c1[c] || 0) + 1; }
+  const topCat = Object.entries(c1).sort((a, b) => b[1] - a[1])[0];
+  const path = topCat ? `${topCat[0]} > ${top[0]}` : top[0];
+  return { name, path, total: shop.total || 0, med: medianPrice(items) };
 }
 
 // 후보 채택 기준 (2026-07-28 Founder 확정)

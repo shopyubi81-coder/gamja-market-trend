@@ -516,6 +516,8 @@ function kw2cat(){
 }
 function matchCat(q){
   const t=String(q||'').trim();
+  // 1순위: 이번 검색 결과가 알려준 실제 분야(네이버 category1) — 추측이 아니라 사실
+  if(state.cat1 && (t===state.query || (state.products||[]).some(p=>p.name===t))) return state.cat1;
   const map=kw2cat();
   if(map[t]) return map[t];                                   // 시드 키워드 완전 일치
   for(const k in map) if(k.length>=3 && t.includes(k)) return map[k];   // 상품명에 시드가 포함된 경우
@@ -687,6 +689,7 @@ async function doSearch(){
       const med=ps.length?ps[Math.floor(ps.length/2)]:0;
       items.forEach((it,i)=>{ it.score=scoreOf(j.total,i,it.price,med); });
       state.products=items; state.med=med;
+      state.cat1=catOfItems(items);              // 네이버가 알려준 실제 분야
       snapSave(q, j.total, med);                 // 오늘치 매물수·가격 적립
       state.selected=0; state.showAll=false; state.live=true; setLive('ok');
       await loadTrend();                         // 카테고리 DataLab 실트렌드
@@ -948,7 +951,7 @@ function openWatch(){
   showModal('⭐ 관심 상품 · 키워드', body, 'watchOv');
 }
 // 카테고리 분석 = 분야 비교 개요(7대 분야 트렌드·가격대·신호 한눈에)
-const CAT_REPKW={'디지털/가전':'무선이어폰','스포츠/레저':'캠핑','식품':'간편식','화장품/미용':'선크림','패션의류':'원피스','가구/인테리어':'수납장','출산/육아':'이유식'};
+const CAT_REPKW={'디지털/가전':'무선이어폰','스포츠/레저':'캠핑','식품':'간편식','화장품/미용':'선크림','패션의류':'원피스','가구/인테리어':'수납장','출산/육아':'이유식','패션잡화':'크로스백','생활/건강':'롤화장지'};
 async function openCategoryOverview(){
   if(!state.catData && cfgOK){ try{ const r=await afetch('/api/naver/categories?period=monthly'); const j=await r.json(); if(j&&j.success) state.catData=j.data; }catch(e){} }
   const cats = catTrends(state.catData);
@@ -994,7 +997,24 @@ const SEED_KW = {
   '가구/인테리어':['수납장','접이식 테이블','무드등','암막커튼','러그','옷걸이','신발장','화장대'],
   '출산/육아':    ['이유식 용기','유아 물놀이','기저귀 가방','아기 선풍기','유아 매트','아기 튜브','젖병 세정제','유모차 커버'],
   '식품':         ['간편식','냉동 과일','콜드브루','단백질 쉐이크','밀키트','견과류','이온음료','곤약젤리'],
+  '패션잡화':     ['크로스백','백팩','지갑','벨트','선글라스','버킷햇','스카프','캐리어'],
+  '생활/건강':    ['롤화장지','세탁세제','섬유유연제','구강청정제','면봉','물티슈','제습제','손소독제'],
 };
+
+// 네이버 최상위 분야(category1) → 우리 분야명. 이름 체계가 같아 대부분 그대로 통한다.
+// 검색 결과에서 직접 읽으므로 정규식 추측이 필요 없다.
+function normCat(c1){
+  const s=String(c1||'').trim();
+  if(SEED_KW[s]) return s;
+  if(s==='패션잡화') return '패션잡화';
+  return null;                       // 여가/생활편의·면세점 등은 매핑 없음
+}
+// 검색 결과 묶음에서 가장 많은 최상위 분야를 고른다
+function catOfItems(items){
+  const c={}; (items||[]).forEach(it=>{ const n=normCat(it.cat1); if(n) c[n]=(c[n]||0)+1; });
+  const top=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];
+  return top ? top[0] : null;
+}
 
 // 발굴점수: 세 축을 분해해서 보여준다(왜 이 순위인지 MD가 검증 가능해야 함)
 function discoveryScore(catRel, total, med){
@@ -1043,10 +1063,28 @@ async function scanDiscovery(scope, onProgress){
   // 집계 중인 이번 달 제외 + 시장 공통 드리프트 제거 → 상대 강도순 정렬
   const cats=catTrends(state.catData);
   const picked = scope==='all' ? cats : cats.slice(0,4);   // 상대적으로 강한 분야 우선 스크리닝
+  const byName={}; cats.forEach(c=>{ byName[c.name]=c; });
+  const pickedNames=new Set(picked.map(c=>c.name));
 
-  // 2단계 — 시드 키워드 실측
-  const jobs=[];
-  picked.forEach(c=>(SEED_KW[c.name]||[]).forEach(kw=>jobs.push({kw, cat:c.name, mom:c.mom, rel:c.rel})));
+  // 2단계 — 후보 키워드 실측
+  //  (a) 코드 내장 시드
+  const jobs=[]; const added=new Set();
+  picked.forEach(c=>(SEED_KW[c.name]||[]).forEach(kw=>{
+    if(added.has(kw)) return; added.add(kw);
+    jobs.push({kw, cat:c.name, mom:c.mom, rel:c.rel});
+  }));
+  //  (b) 서버 후보 풀 — 쿠팡 실시간 인기에서 매일 자동 갱신되는 키워드
+  //      naver_cat이 "분야 > 품목" 형태라 분야를 추측 없이 확정할 수 있다.
+  try{
+    const r=await afetch('/api/discovery/pool?limit=120'); const j=await r.json();
+    if(j && j.success) (j.data||[]).forEach(p=>{
+      const cat=normCat(String(p.naver_cat||'').split('>')[0].trim());
+      if(!cat || !pickedNames.has(cat)) return;      // 선별 분야 밖이면 제외
+      if(added.has(p.keyword)) return; added.add(p.keyword);
+      const c=byName[cat]; if(!c) return;
+      jobs.push({kw:p.keyword, cat, mom:c.mom, rel:c.rel, pool:true});
+    });
+  }catch(e){ /* 풀을 못 받아도 시드만으로 진행 */ }
   let done=0;
   const rows=await runPool(jobs, 5, async(job)=>{
     const r=await afetch(`/api/naver/search?q=${encodeURIComponent(job.kw)}&display=10`);
@@ -1057,7 +1095,8 @@ async function scanDiscovery(scope, onProgress){
     const med=ps.length?ps[Math.floor(ps.length/2)]:0;
     snapSave(job.kw, j.total, med);              // 스캔 1회 = 32개 키워드 적립
     const sc=discoveryScore(job.rel, j.total, med);
-    return { kw:job.kw, cat:job.cat, mom:job.mom, rel:job.rel, total:j.total, med, top:(j.data[0]&&j.data[0].name)||'', ...sc };
+    return { kw:job.kw, cat:job.cat, mom:job.mom, rel:job.rel, pool:!!job.pool,
+             total:j.total, med, top:(j.data[0]&&j.data[0].name)||'', ...sc };
   });
   return rows.filter(Boolean).sort((a,b)=>b.s-a.s);
 }
@@ -1078,18 +1117,19 @@ async function openDiscovery(scope, force){
   const cached = force ? null : discCacheGet(scope);
   if(cached){ renderDiscovery(cached.rows, scope, cached.ts); return; }
 
-  const n = scope==='all' ? 56 : 32;
+  const n = scope==='all' ? 150 : 80;   // 시드 + 서버 풀 (실제 개수는 스캔 시작 후 확정)
   showModal('🎯 오늘의 발굴', head('') + `
     <div style="padding:14px 2px">
-      <div style="font-size:12.5px;font-weight:700;margin-bottom:7px">시장 스캔 중 <span id="dscN">0</span> / ${n}</div>
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:7px">시장 스캔 중 <span id="dscN">0</span> / <span id="dscT">${n}</span></div>
       <div class="dsc-bar"><i id="dscBar" style="width:0%"></i></div>
       <div class="tabnote" style="padding:8px 0 0">네이버 실검색으로 키워드마다 매물수·가격을 직접 확인합니다. 20~40초 정도 걸립니다.</div>
     </div>`, 'discOv');
 
   try{
     const rows=await scanDiscovery(scope,(d,t)=>{
-      const a=document.getElementById('dscN'), b=document.getElementById('dscBar');
-      if(a) a.textContent=d; if(b) b.style.width=Math.round(d/t*100)+'%';
+      const a=document.getElementById('dscN'), b=document.getElementById('dscBar'), c=document.getElementById('dscT');
+      if(a) a.textContent=d; if(c) c.textContent=t;          // 실제 후보 수로 정정
+      if(b) b.style.width=Math.round(d/t*100)+'%';
     });
     if(!document.getElementById('discOv')) return;    // 사용자가 닫았으면 중단
     discCacheSet(scope, rows);
@@ -1115,7 +1155,7 @@ function renderDiscovery(rows, scope, ts){
     const esc=r.kw.replace(/'/g,'');
     return `<tr>
       <td style="color:var(--muted);font-weight:800">${i+1}</td>
-      <td class="nm" style="font-weight:800">${r.kw}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
+      <td class="nm" style="font-weight:800">${r.kw}${r.pool?' <span class="pill g" style="font-size:8px" title="쿠팡 실시간 인기에서 새로 발굴된 후보">NEW</span>':''}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
       <td>
         <div style="font-weight:800;font-size:14px">${r.s}</div>
         <div class="dsc-seg" title="트렌드 ${r.T}/35 · 경쟁여유 ${r.C}/40 · 가격 ${r.P}/25">
