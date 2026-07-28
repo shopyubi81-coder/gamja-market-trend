@@ -684,7 +684,7 @@ async function doSearch(){
         // 평점·리뷰수·성장률은 API 미제공이라 더 이상 생성하지 않는다
         return { name:it.name, image:it.image, price:it.price||it.priceLow||0,
                  priceText:it.priceText, brand:it.brand, subCategory:it.subCategory,
-                 link:it.link, mall:it.mallName };
+                 cat1:it.cat1, link:it.link, mall:it.mallName };
       });
       const ps=items.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
       const med=ps.length?ps[Math.floor(ps.length/2)]:0;
@@ -1324,7 +1324,7 @@ ${kw} 살까 말까 고민하다가, 오늘 기준으로 실제 판매 중인 �
 ${distLines}
 
 ■ 시장 분위기
-- 경쟁 강도: ${cl} (상품이 많을수록 선택지는 넓지만 고르기는 어렵습니다)
+- 등록 상품이 ${cl==='높음'?'많은 편이라 선택지는 넓지만 고르기가 어렵습니다':cl==='낮음'?'적은 편이라 고르기는 쉽지만 비교 대상이 많지 않습니다':'적당한 편입니다'} (경쟁 강도 ${cl})
 - 시장 규모: ${sz}
 ${trendLine?'- '+trendLine:''}
 ${snapLine?'- '+snapLine:''}
