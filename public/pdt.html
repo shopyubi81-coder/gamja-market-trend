@@ -846,7 +846,8 @@ function renderAIReport(){
       <div class="gtrack"><div class="gfill" style="width:${score}%"></div></div>
       <div class="gt" style="margin-top:8px;color:${tier[1]};background:${tier[2]}">${tier[0]} 신호</div>
       <div class="gl" style="margin-top:6px;font-weight:600;font-size:9px;color:var(--muted)">※ 성공확률 아닌 우선순위 점수 · 성과 누적 후 정밀화</div>
-    </div>`;
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">${regPanelHTML()}</div>`;
 }
 
 function renderProducts(){
@@ -1228,7 +1229,7 @@ function renderDiscovery(rows, scope, ts){
     const esc=r.kw.replace(/'/g,'');
     return `<tr>
       <td style="color:var(--muted);font-weight:800">${i+1}</td>
-      <td class="nm" style="font-weight:800">${r.kw}${r.pool?' <span class="pill g" style="font-size:8px" title="쿠팡 실시간 인기에서 새로 발굴된 후보">NEW</span>':''}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
+      <td class="nm" style="font-weight:800">${r.kw}${r.pool?' <span class="pill g" style="font-size:8px" title="쿠팡 실시간 인기에서 새로 발굴된 후보">NEW</span>':''} ${regBadge(r.kw, r.cat)}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${r.cat}</div></td>
       <td>
         <div style="font-weight:800;font-size:14px">${r.s}</div>
         <div class="dsc-seg" title="트렌드 ${r.T}/35 · 경쟁여유 ${r.C}/40 · 가격 ${r.P}/25">
@@ -1606,6 +1607,85 @@ async function myCheck(m,i){
     }
     ps.innerHTML=`<b style="color:${c}">${t}</b><div style="font-size:10.5px;color:var(--muted);white-space:normal;max-width:190px">${note}</div>`;
   }catch(e){ mk.textContent='조회 실패'; }
+}
+
+// ===================== ⚖️ 규제·인증 체크 =====================
+// 발굴 도구가 '팔 수 없는 상품'을 상위로 올리면 도구가 잘못 만들어진 것이다.
+// 화장품은 책임판매업 등록, 식품은 영업등록·수입신고, 어린이제품은 KC 인증이
+// 없으면 판매 자체가 불법이다. 발굴 단계에서 미리 걸러준다.
+// ⚠️ 법률 자문이 아니다. 아래는 확인해야 할 지점을 알려줄 뿐이며, 실제 요건은
+//    반드시 소관 기관에서 직접 확인해야 한다.
+const REG_RULES=[
+  { id:'med',  lv:3, re:/의료기기|혈압계|체온계|보청기|콘택트렌즈|의약품|파스|찜질기|마사지건|의약외품/,
+    name:'의약품·의료기기', need:'의료기기판매업 신고(식약처). 품목허가·신고 요건이 무겁습니다',
+    org:'식품의약품안전처', url:'https://www.mfds.go.kr' },
+  { id:'kids', lv:3, cat:['출산/육아'], re:/유아|아기|어린이|기저귀|이유식|젖병|유모차|카시트|장난감|완구|아동/,
+    name:'어린이제품(만 13세 이하)', need:'KC 인증 필수 — 안전인증·안전확인·공급자적합성확인 3등급 중 해당 등급',
+    org:'제품안전정보센터(Safety Korea)', url:'https://www.safetykorea.kr' },
+  { id:'cosF', lv:3, re:/미백|주름개선|자외선차단|선크림|선블록|기능성화장품|염색약|탈모/,
+    name:'기능성 화장품', need:'화장품책임판매업 등록 + 기능성화장품 심사 또는 보고',
+    org:'식품의약품안전처', url:'https://www.mfds.go.kr' },
+  { id:'cos',  lv:2, cat:['화장품/미용'], re:/화장품|크림|세럼|에센스|클렌징|샴푸|로션|토너|팩트|쿠션|립|마스크시트|바디|트리트먼트|스크럽/,
+    name:'화장품', need:'화장품책임판매업 등록(식약처). 수입 시 한글 표시 의무',
+    org:'식품의약품안전처', url:'https://www.mfds.go.kr' },
+  { id:'hfood',lv:2, re:/건강기능|비타민|유산균|오메가|홍삼|프로틴|단백질|영양제|콜라겐|루테인/,
+    name:'건강기능식품', need:'건강기능식품판매업 신고 + 표시·광고 사전심의(효능 표현 규제 강함)',
+    org:'식품의약품안전처', url:'https://www.foodsafetykorea.go.kr' },
+  { id:'food', lv:2, cat:['식품'], re:/식품|즉석밥|라면|과자|젤리|음료|커피|두유|우유|치즈|어묵|떡|고추장|견과|밀키트|간편식|냉동|생수|콜라/,
+    name:'가공식품', need:'식품 영업등록 또는 수입식품 영업등록 + 수입신고. 한글 표시(성분·유통기한·원산지) 필수',
+    org:'식품안전나라', url:'https://www.foodsafetykorea.go.kr' },
+  { id:'cont', lv:2, re:/용기|도시락|텀블러|수저|젓가락|프라이팬|냄비|밀폐|빨대|컵|식기|보온병|궁중팬/,
+    name:'식품용 기구·용기', need:'식품용 기구 수입신고. 음식에 직접 닿는지에 따라 재질 기준 적용',
+    org:'식품안전나라', url:'https://www.foodsafetykorea.go.kr' },
+  { id:'elec', lv:1, re:/전기|충전|배터리|이어폰|가전|청소기|선풍기|드라이어|전기포트|조명|무드등|스탠드|어댑터|콘센트|서큘레이터|가습기/,
+    name:'전기용품', need:'KC 안전관리 대상인지 확인. 대상이면 안전인증 없이 판매 불가',
+    org:'제품안전정보센터', url:'https://www.safetykorea.kr' },
+  { id:'chem', lv:1, re:/세제|섬유유연제|탈취|살균|방향제|살충|세정제|표백|제습제|습기제거/,
+    name:'생활화학제품', need:'안전확인대상 생활화학제품인지 확인. 해당 시 신고 필요',
+    org:'제품안전정보센터', url:'https://www.safetykorea.kr' },
+];
+const REG_SAFE=/수납|정리|청소포|가방|백팩|모자|벨트|양말|스카프|요가매트|밴드|문구|필통|지우개|옷걸이|러그|커튼|의자|테이블|선반/;
+function regCheck(kw, cat){
+  const hay=String(kw||'');
+  const c=cat||state.cat1||'';
+  const hits=REG_RULES.filter(r=>
+    (r.re && r.re.test(hay)) || (r.cat && r.cat.includes(c))
+  );
+  if(!hits.length){
+    const safe=REG_SAFE.test(hay);
+    return { lv:0, safe, hits:[] };
+  }
+  return { lv:Math.max(...hits.map(h=>h.lv)), safe:false, hits };
+}
+function regBadge(kw, cat){
+  const r=regCheck(kw,cat);
+  if(r.lv>=3) return '<span class="pill" style="background:#FEE2E2;color:#B91C1C;font-size:8px" title="인증·허가 장벽이 높습니다">⚖️ 고위험</span>';
+  if(r.lv===2) return '<span class="pill a" style="font-size:8px" title="영업등록·신고가 필요합니다">⚖️ 등록필요</span>';
+  if(r.lv===1) return '<span class="pill b" style="font-size:8px" title="품목별로 인증 대상인지 확인이 필요합니다">⚖️ 확인</span>';
+  if(r.safe)   return '<span class="pill g" style="font-size:8px" title="특별한 인증 요건이 알려지지 않은 편">⚖️ 무난</span>';
+  return '';
+}
+function regPanelHTML(){
+  const kw=state.query||'';
+  const r=regCheck(kw);
+  const head=`<div class="card-t" style="margin:2px 0 8px">⚖️ 규제·인증 체크</div>`;
+  if(!r.hits.length){
+    return head+`<div class="tabnote" style="line-height:1.6">
+      ${r.safe?'알려진 <b>특별 인증 요건이 확인되지 않는</b> 편입니다.':'해당하는 규제 항목을 찾지 못했습니다.'}
+      다만 <b>이 도구가 모든 규제를 담고 있지는 않습니다</b> — 소싱 전 반드시 직접 확인하세요.</div>`;
+  }
+  const items=r.hits.map(h=>{
+    const c=h.lv>=3?'var(--red)':h.lv===2?'var(--amber)':'var(--sub)';
+    const t=h.lv>=3?'고위험':h.lv===2?'등록 필요':'확인 필요';
+    return `<div style="border-left:3px solid ${c};padding:7px 0 7px 10px;margin-bottom:9px">
+      <div style="font-size:12.5px;font-weight:800">${h.name} <span style="color:${c};font-size:11px">· ${t}</span></div>
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.55;margin-top:3px">${h.need}</div>
+      <div style="font-size:11px;margin-top:4px"><a href="${h.url}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700">${h.org} 확인 →</a></div>
+    </div>`;
+  }).join('');
+  return head+items+`<div class="tabnote" style="padding:4px 0 0;line-height:1.6">
+    ※ <b>법률 자문이 아닙니다.</b> 확인해야 할 지점을 알려줄 뿐이며, 실제 요건·예외는 소관 기관에서 직접 확인하세요.
+    ${r.lv>=3?'<br>⚠️ <b>초기 셀러에게는 권하지 않는 영역</b>입니다 — 인증 비용과 기간이 상당합니다.':''}</div>`;
 }
 
 // ===================== 🚀 발행 센터 =====================
