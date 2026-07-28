@@ -1408,9 +1408,17 @@ function openMargin(){
       <span style="flex:0 0 26px;color:var(--muted)">${unit}</span>
     </label>${hint?`<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px 128px">${hint}</div>`:''}`;
   showModal('💰 마진 계산기', `
-    <div class="tabnote" style="padding:0 0 10px;line-height:1.6">
-      <b>수수료율 기본값은 넣지 않았습니다.</b> 플랫폼·카테고리·정산조건마다 다르고 자주 바뀌어서,
-      제가 임의로 채우면 잘못된 판단을 부릅니다. <b>실제 계약 조건을 확인해 직접 입력</b>해 주세요.
+    <div class="tabnote" style="padding:0 0 8px;line-height:1.6">
+      아래 프리셋은 <b>2026년 7월 기준 공개 자료</b>로 채운 참고값입니다. 카테고리마다 다르니
+      <b>본인 실제 요율을 반드시 확인</b>하세요 — 네이버는 <b>정산관리 → 나의 수수료 정보</b>,
+      쿠팡은 <b>쿠팡윙 → 판매자 수수료 안내</b>에서 볼 수 있습니다.
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px">
+      <button class="seln" onclick="mgPreset('naver')">🟢 네이버 (자연노출)</button>
+      <button class="seln" onclick="mgPreset('naverAd')">🟢 네이버 (마케팅경로)</button>
+      <button class="seln" onclick="mgPreset('coupangLow')">🔵 쿠팡 (저율 4%)</button>
+      <button class="seln" onclick="mgPreset('coupangHigh')">🔵 쿠팡 (고율 10.9%)</button>
+      <button class="seln" onclick="mgPreset('clear')">지우기</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr;gap:0">
       ${f('mgSell','판매가', price, '원','고객이 결제하는 금액(배송비 별도)')}
@@ -1421,11 +1429,35 @@ function openMargin(){
       ${f('mgAd','광고비', 0, '%','매출 대비 광고 지출 비율')}
       ${f('mgRet','반품·불량률', 0, '%','반품 시 왕복 배송비와 손실 반영')}
     </div>
+    <div id="mgPresetNote" style="font-size:11px;color:var(--primary);font-weight:700;margin-top:2px"></div>
     <div id="mgOut" style="margin-top:12px"></div>
     <div class="tabnote" style="padding:10px 0 0;line-height:1.6">
+      <b>수수료만으로 플랫폼을 정하지 마세요.</b> 쿠팡은 수수료가 높은 대신 트래픽이 알아서 오고,
+      네이버는 수수료가 낮은 대신 상위 노출이 안 되면 <b>광고비가 그 차이를 넘어설 수</b> 있습니다.
+      쿠팡 로켓그로스는 물류비가, 쿠팡 월 매출 100만원 이상은 월 55,000원이 추가로 붙습니다(여기 미반영).<br>
       부가세는 별도입니다(간이/일반과세 여부에 따라 달라 계산에 넣지 않았습니다).
       실제 정산에서는 반품 재입고 손실·포장 인건비도 빠지니 여기 결과보다 낮게 잡는 편이 안전합니다.
     </div>`, 'mgOv', 'wide');
+  calcMargin();
+}
+// 플랫폼 수수료 프리셋 — 2026-07 공개 자료 기준 참고값(카테고리별 편차 큼)
+//   네이버: 2025-06 유입수수료 폐지 → 판매수수료 신설. 자연노출 3% / 마케팅경로 1%,
+//           주문관리(결제) 3.63%(일반사업자)
+//   쿠팡  : 판매수수료 카테고리별 4~10.9% + 결제 2.9%,
+//           월 매출 100만원 이상이면 월 55,000원(VAT 포함) 서비스 이용료 별도(여기 미반영)
+const MG_PRESET={
+  naver:      { fee:3,    pay:3.63, note:'네이버 자연노출 — 판매 3% + 주문관리 3.63%' },
+  naverAd:    { fee:1,    pay:3.63, note:'네이버 마케팅경로 — 판매 1% + 주문관리 3.63% (대신 광고비 별도)' },
+  coupangLow: { fee:4,    pay:2.9,  note:'쿠팡 저율 카테고리 4% + 결제 2.9% (월 서비스료 55,000원 미반영)' },
+  coupangHigh:{ fee:10.9, pay:2.9,  note:'쿠팡 고율 카테고리 10.9% + 결제 2.9% (월 서비스료 55,000원 미반영)' },
+  clear:      { fee:0,    pay:0,    note:'' },
+};
+function mgPreset(k){
+  const p=MG_PRESET[k]; if(!p) return;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
+  set('mgFee',p.fee); set('mgPay',p.pay);
+  const n=document.getElementById('mgPresetNote');
+  if(n) n.innerHTML = p.note ? `적용됨 · ${p.note}` : '';
   calcMargin();
 }
 function calcMargin(){
