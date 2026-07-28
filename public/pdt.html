@@ -407,7 +407,8 @@
       </div>
       <div class="card-b">
         <div class="card-t" style="margin-bottom:10px">다음 액션</div>
-        <button class="act-btn primary" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
+        <button class="act-btn primary" onclick="openPublish()"><span class="ai-ico">🚀</span> 발행 센터</button>
+        <button class="act-btn" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
         <button class="act-btn" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
         <button class="act-btn" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
         <button class="act-btn" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
@@ -1573,6 +1574,161 @@ async function myCheck(m,i){
     }
     ps.innerHTML=`<b style="color:${c}">${t}</b><div style="font-size:10.5px;color:var(--muted);white-space:normal;max-width:190px">${note}</div>`;
   }catch(e){ mk.textContent='조회 실패'; }
+}
+
+// ===================== 🚀 발행 센터 =====================
+// 발굴에서 끝내지 않고 '실제로 올리는 것'까지 잇는 허브.
+// 링크만 모아두면 의미가 없으므로, 실데이터로 초안을 만들어준다.
+// 근거 없는 항목(해시태그 인기도 등)은 추천이 아니라 '미검증'이라고 명시한다.
+
+// 경쟁 상위 상품명에서 공통 속성어를 뽑는다 = 검색 노출에 필요한 단어
+// 브랜드는 API가 따로 주므로 제외한다(브랜드명을 넣어봐야 내 상품엔 도움 안 됨)
+function titleTokens(){
+  const q=state.query||'';
+  const brands=new Set(state.products.map(p=>String(p.brand||'').trim()).filter(Boolean));
+  const stop=new Set(['정품','무료배송','당일발송','최저가','특가','할인','사은품','증정','세트','단품','옵션','선택']);
+  q.split(/\s+/).forEach(t=>stop.add(t));
+  const c={};
+  state.products.forEach(p=>String(p.name).split(/[\s,\/\[\]()·|]+/).forEach(t=>{
+    t=t.trim();
+    if(t.length<2||t.length>10) return;
+    if(!/[가-힣]/.test(t)) return;
+    if(stop.has(t)) return;
+    if([...brands].some(b=>b && (t===b || t.includes(b)))) return;   // 브랜드 제외
+    if(/^\d/.test(t)) return;
+    c[t]=(c[t]||0)+1;
+  }));
+  return Object.entries(c).filter(([,n])=>n>=2).sort((a,b)=>b[1]-a[1]).slice(0,12);
+}
+function pubTab(t,btn){
+  document.querySelectorAll('#pubTabs .tab').forEach(x=>x.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  document.getElementById('pubBody').innerHTML=pubBodyHTML(t);
+}
+function pubBodyHTML(t){
+  const p=state.products[state.selected]||{};
+  const kw=state.query||'';
+  const prices=state.products.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
+  const min=prices[0]||0, med=state.med||prices[Math.floor(prices.length/2)]||0, max=prices[prices.length-1]||0;
+  const toks=titleTokens();
+
+  if(t==='name'){
+    if(!toks.length) return tabnote('상품명을 분석할 경쟁 상품이 부족합니다. 먼저 검색해 주세요.');
+    const attrs=toks.slice(0,6).map(x=>x[0]);
+    const bars=toks.map(([w,n])=>barRow(w, n, toks[0][1], 'var(--primary)')).join('');
+    const sug=[
+      `[브랜드명] ${kw} ${attrs.slice(0,3).join(' ')}`,
+      `[브랜드명] ${attrs[0]||''} ${kw} ${attrs.slice(1,4).join(' ')}`,
+      `${kw} ${attrs.slice(0,4).join(' ')} [브랜드명]`,
+    ].map(s=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <div style="flex:1;font-size:12.5px;font-weight:700;padding:7px 9px;background:var(--bg);border:1px solid var(--line);border-radius:7px">${s.replace(/\s+/g,' ').trim()}</div>
+        <button class="seln" onclick="copyText('${s.replace(/\s+/g,' ').trim().replace(/'/g,'')}')">복사</button>
+      </div>`).join('');
+    return `<div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+        상위 노출 상품 <b>${state.products.length}개</b>의 상품명에서 <b>공통으로 쓰이는 단어</b>를 뽑았습니다.
+        검색에 걸리려면 이 단어들이 내 상품명에도 있어야 합니다. <b>브랜드명은 제외</b>했습니다.
+      </div>
+      <div class="card-t" style="margin:2px 0 8px">경쟁 상품명 빈출 단어 <span class="pill g" style="font-size:8px">실측</span></div>
+      <div class="pbars">${bars}</div>
+      <div class="card-t" style="margin:14px 0 8px">상품명 조합안</div>${sug}
+      <div class="tabnote" style="padding:8px 0 0">네이버는 상품명에 <b>중복 단어·과도한 수식어</b>를 넣으면 노출에 불리합니다. 조합안에서 필요한 것만 남기세요.</div>`;
+  }
+
+  if(t==='price'){
+    const m=myLoad().find(x=>x.kw===kw);
+    const cost=m?m.cost:0, ship=m?m.ship:3000, fee=m?m.fee:0, pay=m?m.pay:0, ad=m?m.ad:0;
+    const marginAt=s=>{ const v=(fee+pay+ad)/100; const pr=s-cost-ship-s*v; return s?Math.round(pr/s*1000)/10:0; };
+    const plans=[
+      ['진입가', Math.round(min*1.05), '초기 리뷰 확보용 — 마진을 줄여 순위를 먼저 만든다'],
+      ['표준가', med, '시장 중앙값 — 가장 무난하지만 차별점이 없으면 묻힌다'],
+      ['프리미엄', Math.round(med*1.25), '구성·배송·상세로 값어치를 증명할 수 있을 때'],
+    ];
+    const rows=plans.map(([n,v,note])=>{
+      const r=marginAt(v);
+      const c=r>=20?'var(--green)':r>=10?'var(--amber)':'var(--red)';
+      return `<tr><td class="nm" style="font-weight:800">${n}<div style="font-size:10.5px;color:var(--muted);font-weight:600;white-space:normal;max-width:220px">${note}</div></td>
+        <td style="font-size:15px;font-weight:800">${won(v)}</td>
+        <td style="color:${c};font-weight:800">${cost?r+'%':'원가 필요'}</td></tr>`;
+    }).join('');
+    return `<div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+        시장 실측(최저 ${won(min)} · 중앙 ${won(med)} · 최고 ${won(max)})을 기준으로 세 가지 가격안입니다.
+        ${cost?'':'<b>마진율을 보려면</b> 🏪 내 상품에 이 키워드를 원가와 함께 등록하세요.'}
+      </div>
+      <table class="ctab"><thead><tr><th>전략</th><th>판매가</th><th>마진율</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="tabnote" style="padding:10px 0 0;line-height:1.6">
+        초기에는 <b>진입가로 리뷰를 모으고</b> 순위가 잡히면 올리는 방식이 일반적입니다.
+        다만 <b>손익분기 아래로는 내리지 마세요</b> — 팔수록 손해입니다.
+      </div>`;
+  }
+
+  if(t==='detail'){
+    const attrs=toks.slice(0,5).map(x=>x[0]).join(', ')||'(경쟁 상품명 분석 필요)';
+    const txt=
+`[상세페이지 구성안] ${kw}
+
+1. 첫 화면 (스크롤 없이 보이는 영역)
+   - 한 줄 카피: 이 상품을 사야 하는 이유 1개만
+   - 대표 이미지: 실사용 장면 (누끼컷보다 전환율 높음)
+   - 가격 + 배송 조건 명시
+
+2. 왜 이 상품인가 (경쟁 대비)
+   - 시장 가격대: 최저 ${won(min)} / 중앙 ${won(med)} / 최고 ${won(max)}
+   - 내 위치와 그 이유를 한 문장으로
+   - 경쟁 상품이 공통으로 내세우는 것: ${attrs}
+     → 이 중 내가 더 잘하는 것을 첫 화면에 배치
+
+3. 스펙 표
+   - 크기 / 무게 / 재질 / 구성품 / 보증
+   - 경쟁사가 안 밝히는 항목을 밝히면 그 자체가 차별점
+
+4. 사용 장면 3컷
+   - 언제, 어디서, 누가 쓰는지
+
+5. 자주 묻는 질문
+   - 반품·교환 조건, 배송 소요일, A/S
+
+6. 신뢰 요소
+   - 리뷰(확보 후), 인증·시험성적서, 사업자 정보
+
+※ 시장 수치는 ${new Date().toLocaleDateString('ko-KR')} 네이버쇼핑 실측입니다.`;
+    window.__detail=txt;      // innerHTML로 넣은 <script>는 실행되지 않으므로 여기서 직접 보관
+    return `<div class="tabnote" style="padding:0 0 9px">실제 시세를 넣은 구성 틀입니다. 문구는 상품에 맞게 고쳐 쓰세요.</div>
+      <pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;line-height:1.6;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:11px">${txt.replace(/</g,'&lt;')}</pre>
+      <button class="go" style="width:100%;margin-top:10px" onclick="copyText(window.__detail)">📋 복사</button>`;
+  }
+
+  if(t==='sns'){
+    const tags=[kw.replace(/\s+/g,''), ...toks.slice(0,5).map(x=>x[0].replace(/\s+/g,''))]
+      .filter(Boolean).map(t=>'#'+t);
+    const extra=['#추천템','#가성비','#내돈내산','#일상템'];
+    const cap=window.__cap=`${kw} 찾다가 가격 다 비교해봤어요.
+
+지금 시장가는 최저 ${won(min)}, 보통 ${won(med)} 정도예요.
+${won(med)} 근처면 무난하고, 너무 싸면 구성이나 용량 꼭 확인하세요.
+
+${[...tags, ...extra].join(' ')}`;
+    return `<div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+        캡션의 <b>가격 수치는 실측</b>입니다. 다만 <b>해시태그는 인기도를 측정한 게 아니라</b>
+        상품명에서 뽑은 단어와 일반적인 태그입니다 — 인스타 노출량 데이터는 확보 경로가 없습니다.
+      </div>
+      <pre style="white-space:pre-wrap;font-family:inherit;font-size:12.5px;line-height:1.65;margin:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:11px">${cap.replace(/</g,'&lt;')}</pre>
+      <button class="go" style="width:100%;margin-top:10px" onclick="copyText(window.__cap)">📋 캡션 복사</button>
+      <div class="tabnote" style="padding:10px 0 0">제휴 링크를 넣으시면 <b>광고 표시</b>가 필요합니다(프로필·본문에 명시).</div>`;
+  }
+  return '';
+}
+function openPublish(){
+  if(!state.products.length){ alert('먼저 상품을 검색하세요'); return; }
+  const tabs=[['name','🏷️ 상품명'],['price','💵 가격 전략'],['detail','📄 상세페이지'],['sns','📸 인스타'],];
+  showModal('🚀 발행 센터 · '+state.query, `
+    <div class="tabnote" style="padding:0 0 10px;line-height:1.6">
+      발굴한 상품을 <b>실제로 올리는 것</b>까지 잇는 곳입니다. 시장 실측값으로 초안을 만듭니다.
+    </div>
+    <div id="pubTabs" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">
+      ${tabs.map((x,i)=>`<button class="tab ${i===0?'on':''}" style="padding:6px 11px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer" onclick="pubTab('${x[0]}',this)">${x[1]}</button>`).join('')}
+      <button class="tab" style="padding:6px 11px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer" onclick="closeModal('pubOv');openPost()">✍️ 블로그 글</button>
+    </div>
+    <div id="pubBody">${pubBodyHTML('name')}</div>`, 'pubOv', 'wide');
 }
 
 // 공통 모달(동적 생성)
