@@ -118,7 +118,12 @@
   .pscore{ font-size:13px; font-weight:800; color:#fff; background:var(--primary); border-radius:7px; padding:2px 8px; flex-shrink:0; }
   .psub{ font-size:10.5px; color:var(--muted); font-weight:600; margin-top:3px;
          white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .pmeta{ display:flex; gap:12px; margin-top:5px; font-size:10.5px; color:var(--sub); }
+  /* 카드 클릭 = 분석 선택, 이 링크 = 실제 상품 페이지 (클릭 전파를 막는다) */
+  .plink{ margin-left:auto; font-size:10.5px; font-weight:700; color:var(--naver);
+          text-decoration:none; border:1px solid var(--naver); border-radius:6px;
+          padding:2px 6px; white-space:nowrap; flex-shrink:0; }
+  .plink:hover{ background:var(--naver); color:#fff; }
+  .pmeta{ display:flex; gap:10px; align-items:center; margin-top:5px; font-size:10.5px; color:var(--sub); }
   .pmeta b{ color:var(--text); font-weight:700; }
   .pmeta .up{ color:var(--green); font-weight:800; }
   #plist{ max-height:60vh; overflow-y:auto; }
@@ -773,11 +778,12 @@ function compareHTML(){
   const rows=ps.map((p,i)=>{ const dv=med?Math.round((p.price-med)/med*100):0;
     return `<tr class="${i===state.selected?'on':''}" onclick="selectProduct(${i})">
       <td>${i+1}</td><td class="nm">${p.name.length>26?p.name.slice(0,26)+'…':p.name}</td>
-      <td>${won(p.price)}</td><td class="${dv>0?'dn':'up'}">${med?(dv>0?'+':'')+dv+'%':'-'}</td><td class="sc">${p.score}</td></tr>`;
+      <td>${won(p.price)}</td><td class="${dv>0?'dn':'up'}">${med?(dv>0?'+':'')+dv+'%':'-'}</td><td class="sc">${p.score}</td>
+      <td>${p.link?`<a href="${p.link}" target="_blank" rel="noopener" class="plink" onclick="event.stopPropagation()">🔗</a>`:''}</td></tr>`;
   }).join('');
   return `<div class="card-t" style="margin:2px 0 8px">경쟁 상품 비교 <span class="pill g" style="font-size:8px">실시간 ${ps.length}개</span></div>
-    <table class="ctab"><thead><tr><th>#</th><th>상품</th><th>가격</th><th>중앙값대비</th><th>점수</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="tabnote" style="padding:8px 0 0">행을 누르면 해당 상품으로 분석이 전환됩니다.</div>`;
+    <table class="ctab"><thead><tr><th>#</th><th>상품</th><th>가격</th><th>중앙값대비</th><th>점수</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="tabnote" style="padding:8px 0 0">행을 누르면 해당 상품으로 <b>분석이 전환</b>되고, 🔗을 누르면 <b>네이버쇼핑 상품 페이지</b>가 새 탭으로 열립니다.</div>`;
 }
 function renderTabBody(){
   const el=document.getElementById('tabBody'); if(!el)return;
@@ -886,7 +892,11 @@ function renderProducts(){
       <div class="pbody">
         <div class="prow1"><div class="pnm">${i+1}. ${p.name}</div><div class="pscore">${p.score}점</div></div>
         ${sub?`<div class="psub">${sub}</div>`:''}
-        <div class="pmeta"><span>가격 <b>${p.priceText||won(p.price)}</b></span>${dvTxt}</div>
+        <div class="pmeta">
+          <span>가격 <b>${p.priceText||won(p.price)}</b></span>${dvTxt}
+          ${p.link?`<a href="${p.link}" target="_blank" rel="noopener" class="plink"
+             title="네이버쇼핑에서 이 상품 보기" onclick="event.stopPropagation()">🔗 상품 보기</a>`:''}
+        </div>
       </div>
     </div>`;
   }).join('');
