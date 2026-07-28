@@ -328,6 +328,7 @@
       <div class="rail-sec">
         <div class="rail-lbl">탐색</div>
         <div class="rail-item disc" onclick="navMenu(this,'sourcing')"><span class="ic">📅</span> 소싱 타이밍 <span class="pill g" style="font-size:8px;margin-left:auto">선행</span></div>
+        <div class="rail-item disc" onclick="navMenu(this,'events')"><span class="ic">🗓️</span> 이벤트 캘린더 <span class="pill g" style="font-size:8px;margin-left:auto">D-</span></div>
         <div class="rail-item disc" onclick="navMenu(this,'discover')"><span class="ic">🎯</span> 오늘의 발굴 <span class="pill g" style="font-size:8px;margin-left:auto">AUTO</span></div>
         <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
         <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">📈</span> 분야 분석·트렌드</div>
@@ -405,7 +406,8 @@
       </div>
       <div class="card-b">
         <div class="card-t" style="margin-bottom:10px">다음 액션</div>
-        <button class="act-btn primary" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
+        <button class="act-btn primary" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
+        <button class="act-btn" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
         <button class="act-btn" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
         <button class="act-btn" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
         <button class="act-btn" onclick="addWatch()"><span class="ai-ico">🔔</span> 관심 상품 추가</button>
@@ -920,6 +922,7 @@ function navMenu(el, mode){
   document.querySelectorAll('.rail-item').forEach(x=>x.classList.remove('on')); el.classList.add('on');
   if(mode==='search'){ const q=document.getElementById('q'); q.focus(); q.select(); }
   else if(mode==='sourcing'){ openSourcing(); }
+  else if(mode==='events'){ openEvents(); }
   else if(mode==='discover'){ openDiscovery(); }
   else if(mode==='category'){ openCategoryOverview(); }
   else if(mode==='watch'){ openWatch(); }
@@ -1328,6 +1331,148 @@ function renderSourcing(rows){
       진폭 1.6배 미만은 계절성이 약해 '연중 상시'로 분류합니다.<br>
       ※ 피크 달은 최근 3년 <b>월별 평균</b>이라 특정 해의 이벤트(추석·블프 등 날짜 이동)까지 반영하지는 못합니다.
     </div>`,'srcOv','wide');
+}
+
+// ===================== 🗓️ 이벤트 캘린더 =====================
+// 계절 프로파일(3년 월별 평균)은 날짜가 이동하는 이벤트를 못 잡는다.
+// 추석·설날은 음력이라 매년 날짜가 크게 움직이고, 블프·수능은 '몇째 주 무슨 요일' 규칙이다.
+// ⚠️ 음력 기반 날짜는 하드코딩이므로 해가 바뀌면 반드시 확인할 것. 화면에 날짜를 그대로 보여준다.
+const EVENTS=[
+  { d:'2026-09-25', name:'추석',        lead:8,  kw:['선물세트','홍삼','과일선물','한우세트','제수용품','명절이불'] },
+  { d:'2026-10-31', name:'핼러윈',      lead:6,  kw:['핼러윈 코스튬','파티용품','호박 장식'] },
+  { d:'2026-11-11', name:'빼빼로데이·광군제', lead:5, kw:['빼빼로','초콜릿 선물','과자 선물세트'] },
+  { d:'2026-11-19', name:'수능',        lead:5,  kw:['수능 선물','합격 기원','찹쌀떡','수험생 간식','목베개'] },
+  { d:'2026-11-27', name:'블랙프라이데이', lead:6, kw:['가전 할인','대형가전','노트북'] },
+  { d:'2026-12-25', name:'크리스마스',   lead:8,  kw:['크리스마스 트리','산타 의상','어드벤트 캘린더','조명 장식'] },
+  { d:'2027-01-01', name:'신년',        lead:5,  kw:['다이어리','플래너','헬스용품','홈트레이닝'] },
+  { d:'2027-02-06', name:'설날',        lead:8,  kw:['설 선물세트','한과','건강식품','명절 한복'] },
+  { d:'2027-02-14', name:'발렌타인데이', lead:5,  kw:['수제 초콜릿','초콜릿 만들기','선물 포장'] },
+  { d:'2027-03-02', name:'신학기·개학',  lead:6,  kw:['책가방','필통','실내화','학용품 세트','책상 스탠드'] },
+  { d:'2027-03-14', name:'화이트데이',   lead:5,  kw:['사탕 선물','캔디 바구니','기념일 선물'] },
+  { d:'2027-05-05', name:'어린이날',     lead:7,  kw:['어린이 장난감','키즈 자전거','물놀이용품'] },
+  { d:'2027-05-08', name:'어버이날',     lead:7,  kw:['카네이션','부모님 선물','안마기','건강식품'] },
+];
+function daysUntil(dstr){
+  const t=new Date(); t.setHours(0,0,0,0);
+  return Math.round((new Date(dstr+'T00:00:00') - t)/86400000);
+}
+function openEvents(){
+  const rows=EVENTS.map(e=>({...e, days:daysUntil(e.d), wks:Math.round(daysUntil(e.d)/7)}))
+                   .filter(e=>e.days>=0).sort((a,b)=>a.days-b.days);
+  const verdict=(wks,lead)=>{
+    if(wks<=1)        return ['🔴 판매 마감 임박','var(--red)','신규 소싱은 불가 — 재고 소진에 집중'];
+    if(wks<=lead-2)   return ['🟠 지금은 판매 구간','var(--amber)','소싱은 늦음 — 광고·가격으로 승부'];
+    if(wks<=lead+2)   return ['🟢 지금 소싱','var(--green)','리드타임상 지금이 준비 적기'];
+    if(wks<=lead+8)   return ['🟡 준비 시작','var(--amber)','공급처·샘플 확인 시작'];
+    return ['⚪ 이르다','var(--sub)','관심목록에만 담아두기'];
+  };
+  const body=rows.map(e=>{
+    const v=verdict(e.wks, e.lead);
+    const chips=e.kw.map(k=>`<button class="seln" style="margin:2px 3px 0 0" onclick="document.getElementById('q').value='${k}';doSearch();closeModal('evOv')">${k}</button>`).join('');
+    return `<tr>
+      <td class="nm" style="font-weight:800;white-space:nowrap">${e.name}<div style="font-size:10.5px;color:var(--muted);font-weight:600">${e.d}</div></td>
+      <td style="text-align:center"><b style="font-size:16px">D-${e.days}</b><div style="font-size:10.5px;color:var(--muted)">약 ${e.wks}주</div></td>
+      <td style="color:${v[1]};font-weight:800;white-space:nowrap">${v[0]}<div style="font-size:10px;color:var(--muted);font-weight:600;white-space:normal;max-width:160px">${v[2]}</div></td>
+      <td style="white-space:normal;min-width:220px">${chips}</td>
+    </tr>`;
+  }).join('');
+  showModal('🗓️ 이벤트 캘린더 · 날짜가 정해진 수요', `
+    <div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+      계절 분석(3년 월별 평균)은 <b>날짜가 이동하는 이벤트를 못 잡습니다</b>. 추석·설날은 음력이라 매년 크게 움직이니 여기서 따로 봅니다.<br>
+      이벤트마다 <b>필요 리드타임</b>이 달라서(선물세트 8주, 데이 상품 5주) 판정 기준도 다릅니다. 키워드를 누르면 바로 분석됩니다.
+    </div>
+    <div class="ctab-wrap"><table class="ctab"><thead><tr>
+      <th>이벤트</th><th>남은 기간</th><th>판정</th><th>관련 키워드 (클릭=분석)</th>
+    </tr></thead><tbody>${body}</tbody></table></div>
+    <div class="tabnote" style="padding:10px 0 0;line-height:1.6">
+      ⚠️ <b>음력 기반 날짜(추석·설날)는 직접 입력한 값</b>입니다. 날짜를 표에 그대로 띄웠으니 한 번 확인해 주세요 — 틀렸으면 알려주시면 고치겠습니다.<br>
+      ⚠️ 키워드는 <b>일반적으로 알려진 연관어</b>이지 실측으로 검증된 목록이 아닙니다. 눌러서 실제 경쟁·가격을 꼭 확인하세요.
+    </div>`, 'evOv', 'wide');
+}
+
+// ===================== 💰 마진 계산기 =====================
+// ⚠️ 수수료율은 플랫폼·카테고리·정산조건마다 다르고 자주 바뀐다.
+// 지어낸 숫자를 기본값으로 박아두면 잘못된 판단을 부르므로, 전부 입력값으로 두고
+// 계산 틀만 제공한다. 사용자가 실제 계약 조건을 넣어야 의미가 있다.
+function openMargin(){
+  const p=state.products[state.selected]||{};
+  const price=p.price||state.med||0;
+  const f=(id,label,val,unit,hint)=>`
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px">
+      <span style="flex:0 0 120px;color:var(--sub);font-weight:700">${label}</span>
+      <input id="${id}" type="number" value="${val}" oninput="calcMargin()"
+        style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-weight:700">
+      <span style="flex:0 0 26px;color:var(--muted)">${unit}</span>
+    </label>${hint?`<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px 128px">${hint}</div>`:''}`;
+  showModal('💰 마진 계산기', `
+    <div class="tabnote" style="padding:0 0 10px;line-height:1.6">
+      <b>수수료율 기본값은 넣지 않았습니다.</b> 플랫폼·카테고리·정산조건마다 다르고 자주 바뀌어서,
+      제가 임의로 채우면 잘못된 판단을 부릅니다. <b>실제 계약 조건을 확인해 직접 입력</b>해 주세요.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:0">
+      ${f('mgSell','판매가', price, '원','고객이 결제하는 금액(배송비 별도)')}
+      ${f('mgCost','매입 원가', Math.round(price*0.4), '원','사입 단가 + 부자재')}
+      ${f('mgShip','내가 부담하는 배송비', 3000, '원','무료배송이면 실제 택배비, 유료면 0')}
+      ${f('mgFee','플랫폼 수수료', 0, '%','스마트스토어·쿠팡 판매수수료 (카테고리별 상이)')}
+      ${f('mgPay','결제 수수료', 0, '%','카드·간편결제 수수료')}
+      ${f('mgAd','광고비', 0, '%','매출 대비 광고 지출 비율')}
+      ${f('mgRet','반품·불량률', 0, '%','반품 시 왕복 배송비와 손실 반영')}
+    </div>
+    <div id="mgOut" style="margin-top:12px"></div>
+    <div class="tabnote" style="padding:10px 0 0;line-height:1.6">
+      부가세는 별도입니다(간이/일반과세 여부에 따라 달라 계산에 넣지 않았습니다).
+      실제 정산에서는 반품 재입고 손실·포장 인건비도 빠지니 여기 결과보다 낮게 잡는 편이 안전합니다.
+    </div>`, 'mgOv', 'wide');
+  calcMargin();
+}
+function calcMargin(){
+  const g=id=>parseFloat((document.getElementById(id)||{}).value)||0;
+  const sell=g('mgSell'), cost=g('mgCost'), ship=g('mgShip');
+  const fee=g('mgFee')/100, pay=g('mgPay')/100, ad=g('mgAd')/100, ret=g('mgRet')/100;
+  const el=document.getElementById('mgOut'); if(!el) return;
+  if(sell<=0){ el.innerHTML='<div class="tabnote">판매가를 입력하세요.</div>'; return; }
+  const feeAmt=sell*fee, payAmt=sell*pay, adAmt=sell*ad;
+  // 반품은 매출은 사라지고 왕복 배송비만 남는다고 본다(보수적)
+  const retAmt=ret*(ship*2);
+  const profit=sell-cost-ship-feeAmt-payAmt-adAmt-retAmt;
+  const rate=sell?profit/sell*100:0;
+  // 손익분기 판매가 — 변동비 비율을 제외한 나머지로 고정비를 덮는 지점
+  const varRate=fee+pay+ad;
+  const be=(1-varRate)>0 ? (cost+ship+retAmt)/(1-varRate) : 0;
+  const tone = rate>=20?['var(--green)','좋음'] : rate>=10?['var(--amber)','보통'] : rate>0?['var(--red)','빠듯함'] : ['var(--red)','적자'];
+  const row=(l,v,neg)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line2);font-size:12px">
+      <span style="color:var(--sub)">${l}</span><b style="color:${neg?'var(--red)':'var(--text)'}">${neg?'−':''}${Math.round(v).toLocaleString()}원</b></div>`;
+  el.innerHTML=`
+    <div style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px">
+      ${row('판매가', sell)}
+      ${row('매입 원가', cost, 1)}
+      ${row('배송비', ship, 1)}
+      ${row('플랫폼 수수료', feeAmt, 1)}
+      ${row('결제 수수료', payAmt, 1)}
+      ${row('광고비', adAmt, 1)}
+      ${row('반품 손실(추정)', retAmt, 1)}
+      <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-size:14px">
+        <b>건당 순이익</b><b style="color:${tone[0]};font-size:18px">${Math.round(profit).toLocaleString()}원</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px">
+        <span style="color:var(--sub)">마진율</span>
+        <b style="color:${tone[0]}">${rate.toFixed(1)}% · ${tone[1]}</b>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">
+      <div style="border:1px solid var(--line);border-radius:9px;padding:10px;text-align:center">
+        <div style="font-size:10.5px;color:var(--sub);font-weight:700">손익분기 판매가</div>
+        <div style="font-size:16px;font-weight:800;margin-top:3px">${be?Math.round(be).toLocaleString()+'원':'-'}</div>
+        <div style="font-size:10px;color:var(--muted)">이보다 싸게 팔면 적자</div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:9px;padding:10px;text-align:center">
+        <div style="font-size:10.5px;color:var(--sub);font-weight:700">100개 판매 시</div>
+        <div style="font-size:16px;font-weight:800;margin-top:3px;color:${tone[0]}">${Math.round(profit*100).toLocaleString()}원</div>
+        <div style="font-size:10px;color:var(--muted)">반품·광고 반영 후</div>
+      </div>
+    </div>
+    ${state.med?`<div class="tabnote" style="padding:9px 0 0">시장 중앙값 <b>${won(state.med)}</b> 기준으로 계산하면 마진율이
+      <b>${(()=>{const s=state.med,fa=s*fee,pa=s*pay,aa=s*ad;const pr=s-cost-ship-fa-pa-aa-retAmt;return (s?pr/s*100:0).toFixed(1);})()}%</b>입니다.</div>`:''}`;
 }
 
 // 공통 모달(동적 생성)
