@@ -22,3 +22,7 @@ supabase/.temp
 # 에디터
 .vscode/
 .idea/
+
+# 수동 배포용 임시 사본
+EDGE_배포용_*.txt
+SQL_실행용_*.txt

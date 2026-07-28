@@ -633,6 +633,24 @@ function snapSave(kw, total, med){
   try{ localStorage.setItem(SNAP_KEY, JSON.stringify(all)); }catch(e){}
 }
 function snapSeries(kw){ return snapAll()[kw]||[]; }
+// 서버(Supabase) 누적분 — 크론이 매일 쌓으므로 PC를 꺼도 이어진다.
+// localStorage는 오프라인/즉시표시용 캐시로만 남기고, 같은 날짜는 서버 값을 우선한다.
+async function snapFetch(kw){
+  if(!cfgOK || !kw) return null;
+  if(state.snapCache && state.snapCache.kw===kw) return state.snapCache.rows;
+  try{
+    const r=await afetch('/api/snapshot?q='+encodeURIComponent(kw)+'&days=60');
+    if(r.ok){ const j=await r.json();
+      if(j && j.success && Array.isArray(j.data)){ state.snapCache={kw, rows:j.data}; return j.data; } }
+  }catch(e){}
+  return null;
+}
+function snapMerge(local, remote){
+  const m={};
+  (local||[]).forEach(r=>{ m[r.d]=r; });
+  (remote||[]).forEach(r=>{ m[r.d]=r; });     // 서버 우선
+  return Object.values(m).sort((a,b)=> a.d<b.d ? -1 : 1);
+}
 function snapDayCount(){ const all=snapAll(); const s=new Set(); for(const k in all) all[k].forEach(r=>s.add(r.d)); return s.size; }
 
 function loadDemo(){ state.live=false; state.total=270000;
@@ -651,7 +669,7 @@ function sizeLabel(t){ if(t==null)return'중'; return t>150000?'대':t>40000?'�
 
 async function doSearch(){
   const q=(document.getElementById('q').value||'').trim(); if(!q) return;
-  state.query=q;
+  state.query=q; state.snapCache=null;      // 키워드가 바뀌면 서버 스냅샷 캐시 무효화
   if(!cfgOK){ loadDemo(); paint(); return; }
   setLive('loading');
   try{
@@ -1286,13 +1304,19 @@ function renderCharts(){
     if(tag){ tag.className='pill a'; tag.style.fontSize='8px'; tag.textContent='데이터 없음'; }
     sparkEmpty('ch1','검색량 데이터를 불러오지 못했습니다.');
   }
-  // ②③ 매물수·가격 추이 — 우리가 매일 적립한 실측 스냅샷
+  // ②③ 매물수·가격 추이 — 매일 적립한 실측 스냅샷
   const kw=state.query;
-  const ser=snapSeries(kw);
+  drawSnapCharts(snapSeries(kw));                     // 로컬분으로 즉시 표시
+  snapFetch(kw).then(remote=>{                        // 서버 누적분 도착하면 갱신
+    if(remote && state.query===kw) drawSnapCharts(snapMerge(snapSeries(kw), remote), true);
+  });
+}
+function drawSnapCharts(ser, fromServer){
   const t2=document.getElementById('ch2tag'), t3=document.getElementById('ch3tag');
+  if(!t2 && !t3) return;                              // 다른 탭이면 무시
   if(ser.length>=2){
     const s=ser.slice(-14);
-    const badge=`실측 ${s.length}일`;
+    const badge=`실측 ${s.length}일${fromServer?' · 서버':''}`;
     if(t2){ t2.className='pill g'; t2.textContent=badge; }
     if(t3){ t3.className='pill g'; t3.textContent=badge; }
     spark('ch2', s.map(r=>r.t), '#16A34A');
@@ -1300,9 +1324,9 @@ function renderCharts(){
     const ax=s.map(r=>({period:r.d}));
     setAxisDays('ax2', ax); setAxisDays('ax3', ax);
   } else {
-    const msg=`오늘 1일치만 적립됨.<br>내일 다시 조회하면 추이가 그려집니다.<br><span style="color:var(--muted)">(네이버 API가 리뷰수·판매량을 주지 않아<br>실제로 받을 수 있는 매물수·가격으로 대체)</span>`;
-    if(t2){ t2.className='pill a'; t2.textContent='적립 1일차'; }
-    if(t3){ t3.className='pill a'; t3.textContent='적립 1일차'; }
+    const msg=`아직 ${ser.length}일치만 쌓였습니다.<br>매일 아침 7:40 서버가 자동으로 적립하니<br>내일부터 추이가 그려집니다.<br><span style="color:var(--muted)">(네이버 API가 리뷰수·판매량을 주지 않아<br>실제로 받을 수 있는 매물수·가격으로 대체)</span>`;
+    if(t2){ t2.className='pill a'; t2.textContent=`적립 ${ser.length}일차`; }
+    if(t3){ t3.className='pill a'; t3.textContent=`적립 ${ser.length}일차`; }
     sparkEmpty('ch2', msg); sparkEmpty('ch3', msg);
     const a2=document.getElementById('ax2'), a3=document.getElementById('ax3');
     if(a2)a2.innerHTML=''; if(a3)a3.innerHTML='';

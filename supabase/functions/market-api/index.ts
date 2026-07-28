@@ -362,6 +362,101 @@ async function saveReport(report: any) {
   });
 }
 
+// ===== 키워드 일일 스냅샷 (매물수·가격중앙값 시계열) =====
+// 네이버 API가 리뷰수·평점·판매량을 주지 않으므로(실측 확인), 실제로 주는
+// 매물수·가격을 매일 저장해 추이를 자체 생성한다. 브라우저가 아니라 서버(pg_cron)에서
+// 쌓기 때문에 PC를 꺼도, 대시보드를 안 열어도 누적된다.
+
+// 발굴 시드 키워드 — 프론트 SEED_KW와 동일하게 유지할 것
+const SNAPSHOT_SEEDS: string[] = [
+  "무선이어폰","블루투스 스피커","보조배터리","서큘레이터","무선청소기","전기포트","차량용 충전기","스마트워치 스트랩",
+  "캠핑 의자","캠핑 테이블","등산 스틱","요가매트","자전거 라이트","아이스박스","워터슈즈","낚시 릴",
+  "린넨 셔츠","냉감 티셔츠","여름 원피스","와이드 팬츠","샌들","래시가드","볼캡","크로스백",
+  "선크림","쿠션 팩트","클렌징 오일","헤어 에센스","바디 미스트","마스크팩","립밤","두피 스케일러",
+  "수납장","접이식 테이블","무드등","암막커튼","러그","옷걸이","신발장","화장대",
+  "이유식 용기","유아 물놀이","기저귀 가방","아기 선풍기","유아 매트","아기 튜브","젖병 세정제","유모차 커버",
+  "간편식","냉동 과일","콜드브루","단백질 쉐이크","밀키트","견과류","이온음료","곤약젤리",
+];
+
+// 크론은 UTC 22:40에 돌지만 저장 날짜는 KST 기준이어야 한다(= 그날 아침 7:40)
+const todayKST = () => new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+
+function medianPrice(items: any[]) {
+  const ps = items.map((x: any) => x.price || x.priceLow || 0)
+                  .filter(Boolean).sort((a: number, b: number) => a - b);
+  return ps.length ? ps[Math.floor(ps.length / 2)] : 0;
+}
+
+async function snapshotSave(keyword: string, total: number, med: number) {
+  if (!SB_URL || !SB_SERVICE_KEY || !keyword || total == null) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/keyword_snapshot?on_conflict=keyword,d`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}`,
+        "Content-Type": "application/json", Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify({ keyword, d: todayKST(), total, med: med || 0 }),
+    });
+  } catch (_) { /* 적립 실패가 조회를 막지 않게 무시 */ }
+}
+
+async function keywordTrack(keyword: string, source = "search") {
+  if (!SB_URL || !SB_SERVICE_KEY || !keyword) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/keyword_track?on_conflict=keyword`, {
+      method: "POST",
+      headers: {
+        apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}`,
+        "Content-Type": "application/json", Prefer: "resolution=merge-duplicates",
+      },
+      body: JSON.stringify({ keyword, source, last_seen: new Date().toISOString() }),
+    });
+  } catch (_) { /* 무시 */ }
+}
+
+async function snapshotSeries(keyword: string, days: number) {
+  if (!SB_URL || !SB_SERVICE_KEY) return [];
+  const r = await fetch(
+    `${SB_URL}/rest/v1/keyword_snapshot?keyword=eq.${encodeURIComponent(keyword)}` +
+    `&select=d,total,med&order=d.desc&limit=${days}`,
+    { headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` } },
+  );
+  const rows = await r.json();
+  return Array.isArray(rows) ? rows.slice().reverse() : [];   // 오래된 → 최신 순
+}
+
+// 추적 대상 = 시드 + MD가 실제로 검색한 키워드(최근 사용 순)
+async function trackedKeywords(limit: number) {
+  const set = new Set<string>(SNAPSHOT_SEEDS);
+  if (SB_URL && SB_SERVICE_KEY) {
+    try {
+      const r = await fetch(
+        `${SB_URL}/rest/v1/keyword_track?select=keyword&order=last_seen.desc&limit=200`,
+        { headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` } },
+      );
+      const rows = await r.json();
+      if (Array.isArray(rows)) rows.forEach((x: any) => x?.keyword && set.add(x.keyword));
+    } catch (_) { /* 시드만으로 진행 */ }
+  }
+  return [...set].slice(0, limit);
+}
+
+// 크론이 호출 — 추적 키워드를 네이버로 실측해 그날치 저장
+async function collectSnapshots(limit: number) {
+  const kws = await trackedKeywords(limit);
+  let ok = 0, fail = 0;
+  for (const kw of kws) {                      // 순차 처리(네이버 호출 한도 보호)
+    try {
+      const shop = await naverShop(kw, 10, "sim");
+      const items = (shop.items || []).map((it: any) => mapShopItem(it, "", kw));
+      await snapshotSave(kw, shop.total || 0, medianPrice(items));
+      ok++;
+    } catch (_) { fail++; }
+  }
+  return { date: todayKST(), requested: kws.length, saved: ok, failed: fail };
+}
+
 async function getLatestReport() {
   if (!SB_URL || !SB_SERVICE_KEY) return null;
   const r = await fetch(`${SB_URL}/rest/v1/daily_report?select=data&order=date.desc&limit=1`, {
@@ -500,7 +595,50 @@ Deno.serve(async (req) => {
       if (!query) return json({ error: "query required" }, 400);
       const shop = await naverShop(query, parseInt(q.get("display") || "10"), q.get("sort") || "sim");
       const items = (shop.items || []).map((it: any) => mapShopItem(it, "", query));
+      // MD가 조회한 키워드는 그 자리에서 오늘치 적립 + 추적 대상에 등록해
+      // 다음날부터 크론이 자동으로 이어서 쌓게 한다(응답은 기다리지 않음)
+      snapshotSave(query, shop.total || 0, medianPrice(items));
+      keywordTrack(query, "search");
       return json({ success: true, query, total: shop.total, data: items, fetchedAt: new Date().toISOString() });
+    }
+
+    // ===== 키워드 스냅샷 시계열 조회 =====
+    if (path === "/api/snapshot") {
+      const kw = q.get("q");
+      if (!kw) return json({ error: "q required" }, 400);
+      const days = Math.min(parseInt(q.get("days") || "30"), 180);
+      const rows = await snapshotSeries(kw, days);
+      return json({
+        success: true, keyword: kw,
+        data: rows.map((r: any) => ({ d: r.d, t: r.total, m: r.med })),
+        fetchedAt: new Date().toISOString(),
+      });
+    }
+
+    // ===== 크론 수집 진입점 (매일 07:40 KST) =====
+    if (path === "/api/snapshot/collect") {
+      if (!naverConfigured()) return json({ error: "NAVER_API_NOT_CONFIGURED" }, 503);
+      const limit = Math.min(parseInt(q.get("limit") || "120"), 250);
+      const r = await collectSnapshots(limit);
+      return json({ success: true, ...r });
+    }
+
+    // ===== 수집 상태 점검 (크론이 조용히 죽었는지 확인용) =====
+    if (path === "/api/snapshot/status") {
+      if (!SB_URL || !SB_SERVICE_KEY) return json({ error: "NO_DB" }, 503);
+      const r = await fetch(
+        `${SB_URL}/rest/v1/keyword_snapshot?select=d&order=d.desc&limit=1000`,
+        { headers: { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` } },
+      );
+      const rows = await r.json();
+      const days: Record<string, number> = {};
+      if (Array.isArray(rows)) rows.forEach((x: any) => { days[x.d] = (days[x.d] || 0) + 1; });
+      const list = Object.entries(days).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 14);
+      return json({
+        success: true, today: todayKST(),
+        collectedToday: days[todayKST()] || 0,
+        recentDays: list.map(([d, n]) => ({ d, rows: n })),
+      });
     }
 
     // 네이버 검색어(키워드) 쇼핑 트렌드 — DataLab (카테고리 cid 필요)
