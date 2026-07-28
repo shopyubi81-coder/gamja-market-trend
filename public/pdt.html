@@ -1594,7 +1594,8 @@ function titleTokens(){
     if(t.length<2||t.length>10) return;
     if(!/[가-힣]/.test(t)) return;
     if(stop.has(t)) return;
-    if([...brands].some(b=>b && (t===b || t.includes(b)))) return;   // 브랜드 제외
+    // 브랜드 제외 — 양방향으로 본다('로티'는 브랜드 '로티캠프'의 일부라 걸러야 함
+    if([...brands].some(b=>b && b.length>=2 && (t===b || t.includes(b) || b.includes(t)))) return;
     if(/^\d/.test(t)) return;
     c[t]=(c[t]||0)+1;
   }));
@@ -1643,17 +1644,24 @@ function pubBodyHTML(t){
       ['표준가', med, '시장 중앙값 — 가장 무난하지만 차별점이 없으면 묻힌다'],
       ['프리미엄', Math.round(med*1.25), '구성·배송·상세로 값어치를 증명할 수 있을 때'],
     ];
+    const floor=m?breakEven(m):0;
     const rows=plans.map(([n,v,note])=>{
       const r=marginAt(v);
-      const c=r>=20?'var(--green)':r>=10?'var(--amber)':'var(--red)';
-      return `<tr><td class="nm" style="font-weight:800">${n}<div style="font-size:10.5px;color:var(--muted);font-weight:600;white-space:normal;max-width:220px">${note}</div></td>
-        <td style="font-size:15px;font-weight:800">${won(v)}</td>
+      const bad=cost && floor && v<floor;          // 손익분기 아래면 권할 수 없다
+      const c=bad?'var(--red)':r>=20?'var(--green)':r>=10?'var(--amber)':'var(--red)';
+      return `<tr><td class="nm" style="font-weight:800">${n}<div style="font-size:10.5px;color:var(--muted);font-weight:600;white-space:normal;max-width:220px">${bad?`<b style="color:var(--red)">이 가격은 손익분기(${won(floor)}) 아래라 팔수록 손해입니다</b>`:note}</div></td>
+        <td style="font-size:15px;font-weight:800">${won(v)}${bad?`<div style="font-size:10px;color:var(--red)">불가</div>`:''}</td>
         <td style="color:${c};font-weight:800">${cost?r+'%':'원가 필요'}</td></tr>`;
     }).join('');
+    const warn = (cost && floor && Math.round(min*1.05)<floor)
+      ? `<div class="tabnote" style="padding:0 0 9px;color:var(--red);line-height:1.6">
+           ⚠️ <b>진입가 전략을 쓸 수 없습니다.</b> 시장 최저가가 내 손익분기(${won(floor)})보다 낮아,
+           최저가를 따라가면 팔수록 손해입니다. 원가를 낮추거나 <b>가격이 아닌 것으로 경쟁</b>해야 합니다.
+         </div>` : '';
     return `<div class="tabnote" style="padding:0 0 9px;line-height:1.6">
         시장 실측(최저 ${won(min)} · 중앙 ${won(med)} · 최고 ${won(max)})을 기준으로 세 가지 가격안입니다.
         ${cost?'':'<b>마진율을 보려면</b> 🏪 내 상품에 이 키워드를 원가와 함께 등록하세요.'}
-      </div>
+      </div>${warn}
       <table class="ctab"><thead><tr><th>전략</th><th>판매가</th><th>마진율</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="tabnote" style="padding:10px 0 0;line-height:1.6">
         초기에는 <b>진입가로 리뷰를 모으고</b> 순위가 잡히면 올리는 방식이 일반적입니다.
@@ -1698,9 +1706,9 @@ function pubBodyHTML(t){
   }
 
   if(t==='sns'){
-    const tags=[kw.replace(/\s+/g,''), ...toks.slice(0,5).map(x=>x[0].replace(/\s+/g,''))]
-      .filter(Boolean).map(t=>'#'+t);
-    const extra=['#추천템','#가성비','#내돈내산','#일상템'];
+    const tags=[...new Set([kw.replace(/\s+/g,''), ...toks.slice(0,5).map(x=>x[0].replace(/\s+/g,''))])]
+      .filter(Boolean).map(t=>'#'+t);                       // 중복 태그 제거
+    const extra=['#추천템','#가성비','#내돈내산','#일상템'].filter(t=>!tags.includes(t));
     const cap=window.__cap=`${kw} 찾다가 가격 다 비교해봤어요.
 
 지금 시장가는 최저 ${won(min)}, 보통 ${won(med)} 정도예요.
