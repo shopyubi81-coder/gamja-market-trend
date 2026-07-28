@@ -66,6 +66,11 @@ async function cacheSet(key: string, data: unknown) {
     });
   } catch (_) { /* 무시 */ }
 }
+// ttl과 무관하게 있는 그대로(오래됐어도) 가져온다 — 속도 제한에 걸렸을 때
+// "아무것도 안 보여주는 것"보다 "오래된 값이라도 보여주는 것"이 낫다
+async function cacheGetStale(key: string) {
+  return cacheGet(key, Number.MAX_SAFE_INTEGER);
+}
 
 // ===== 쿠팡 파트너스 HMAC(CEA) 서명 =====
 const COUPANG_HOST = "https://api-gateway.coupang.com";
@@ -691,6 +696,57 @@ Deno.serve(async (req) => {
       const items = (res.data || []).map((p: any) => mapCoupangItem(p, cat.name));
       await cacheSet(cacheKey, items);
       return json({ success: true, cached: false, category: cat.name, data: items, fetchedAt: new Date().toISOString() });
+    }
+
+    // ===== 쿠팡 키워드 검색 (개별 상품 링크·가격 조회) =====
+    // 쿠팡 파트너스 검색 API는 시간당 10회 제한이라, 전역으로 6분(=시간당 최대 10회)에
+    // 한 번만 실제 호출하도록 게이트를 둔다. 6분 안에 다시 요청이 오면:
+    //   ① 그 키워드의 캐시가 있으면(오래됐어도) 그대로 반환 — 뭐라도 보여주는 게 낫다
+    //   ② 캐시가 전혀 없으면 '잠시 후 재시도' 안내와 함께 남은 시간을 반환
+    if (path === "/api/coupang/search") {
+      if (!coupangConfigured()) return json({ error: "COUPANG_API_NOT_CONFIGURED" }, 503);
+      const keyword = q.get("q");
+      if (!keyword) return json({ error: "q required" }, 400);
+      const limit = Math.min(parseInt(q.get("limit") || "5"), 10);
+      const itemKey = `coupang:search:kw:${keyword.trim().toLowerCase()}`;
+      const gateKey = "coupang:search:__gate__";
+      const GATE_MS = 6 * 60 * 1000;
+
+      // 이 키워드 결과가 아직 신선하면(20분 이내) 쿠팡을 아예 호출하지 않고 바로 반환
+      const fresh = await cacheGet(itemKey, 20 * 60 * 1000);
+      if (fresh) {
+        return json({ success: true, keyword, data: fresh.data, fromCache: true, ageMs: fresh.ageMs });
+      }
+
+      const gate = await cacheGet(gateKey, GATE_MS);
+      if (gate) {
+        // 전역 6분 게이트가 아직 잠겨 있음 — 실제 쿠팡 호출은 하지 않는다
+        const retryAfterMs = GATE_MS - gate.ageMs;
+        const stale = await cacheGetStale(itemKey);
+        if (stale) {
+          return json({
+            success: true, keyword, data: stale.data,
+            fromCache: true, stale: true, ageMs: stale.ageMs, retryAfterMs,
+          });
+        }
+        return json({
+          success: false, rateLimited: true, keyword,
+          retryAfterMs, retryAfterSec: Math.ceil(retryAfterMs / 1000),
+          message: "쿠팡 API는 6분에 한 번만 실시간 조회할 수 있습니다(시간당 10회 제한).",
+        });
+      }
+
+      // 게이트가 열려 있음 — 실제로 호출하고 게이트를 잠근다
+      try {
+        const res = await coupangCall(`${CPATH.replace("/v1/products", "")}/products/search`, `keyword=${encodeURIComponent(keyword)}&limit=${limit}`);
+        const items = (res.data?.productData || res.data || []).map((p: any) => mapCoupangItem(p, ""));
+        await cacheSet(itemKey, items);
+        await cacheSet(gateKey, { at: new Date().toISOString() });
+        return json({ success: true, keyword, data: items, fromCache: false, fetchedAt: new Date().toISOString() });
+      } catch (e) {
+        await cacheSet(gateKey, { at: new Date().toISOString() }); // 실패해도 쿠팡에 요청은 갔으므로 게이트는 잠근다
+        return json({ success: false, error: String((e as Error).message || e) }, 502);
+      }
     }
 
     // 네이버 카테고리 트렌드
