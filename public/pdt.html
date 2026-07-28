@@ -1668,6 +1668,27 @@ async function myCheck(m,i){
 }
 
 // ===================== 🏠 오늘의 할 일 (진입점) =====================
+// 각 단계 화면에서 다음 단계로 바로 넘어갈 수 있어야 한다.
+// (처음엔 단계마다 '오늘의 할 일'로 되돌아가야 해서 번거로웠음)
+const TODAY_STEPS=[
+  ['① 발굴',   'openDiscovery()'],
+  ['② 타이밍', 'openSourcing()'],
+  ['③ 캘린더', 'openEvents()'],
+  ['④ 마진',   'openMargin()'],
+  ['⑤ 발주',   'openOrder()'],
+  ['⑥ 내 상품','openMyProducts()'],
+  ['⑦ 발행',   'openPublish()'],
+];
+const STEP_IDS=['todayOv','discOv','srcOv','evOv','mgOv','odOv','myOv','pubOv','postOv'];
+function closeSteps(){ STEP_IDS.forEach(closeModal); }
+// cur = 현재 단계 인덱스(0부터). 해당 없으면 -1
+function stepNav(cur){
+  return `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px;padding-bottom:10px;border-bottom:1px solid var(--line)">
+    <button class="seln" style="font-weight:800" title="오늘의 할 일" onclick="closeSteps();openToday()">🏠</button>
+    ${TODAY_STEPS.map(([l,fn],i)=>
+      `<button class="seln ${i===cur?'on':''}" onclick="closeSteps();${fn}">${l}</button>`).join('')}
+  </div>`;
+}
 // 기능이 14개로 늘면서 "처음 열면 뭘 눌러야 하는지" 알 수 없게 됐다.
 // 흩어진 기능을 순서대로 묶어 하나의 시작 화면으로 만든다. 새 기능은 없다.
 async function openToday(){
@@ -2106,8 +2127,11 @@ function openPublish(){
 }
 
 // 공통 모달(동적 생성)
+// 단계 화면이면 이동 바를 자동으로 붙인다(호출부를 일일이 고치지 않도록 여기서 처리)
+const STEP_INDEX={ discOv:0, srcOv:1, evOv:2, mgOv:3, odOv:4, myOv:5, pubOv:6, postOv:6 };
 function showModal(title, bodyHtml, id, cls){
   closeModal(id);
+  if(id in STEP_INDEX) bodyHtml = stepNav(STEP_INDEX[id]) + bodyHtml;
   const ov=document.createElement('div'); ov.className='ov on'; ov.id=id;
   ov.innerHTML=`<div class="modal ${cls||''}"><div class="modal-h"><b>${title}</b><button class="modal-x" onclick="closeModal('${id}')">✕</button></div><div class="modal-b">${bodyHtml}</div></div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) closeModal(id); });
