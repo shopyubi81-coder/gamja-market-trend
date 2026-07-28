@@ -498,6 +498,39 @@ async function normalizeByNaver(token: string) {
   return { name, path: top[0], total: shop.total || 0, med: medianPrice(items) };
 }
 
+// 후보 채택 기준 (2026-07-28 Founder 확정)
+//  ① 여행·체험은 실물 소싱이 안 되므로 제외 (테마/놀이동산, 국내패키지 등)
+//  ② 네이버 '기타~' 분류는 분류 못 한 것들을 모아둔 칸이라 특정 품목이 아님
+//  ③ 매물 150만 초과는 경쟁이 과해 진입 의미가 적음
+const POOL_TRAVEL = /놀이동산|패키지|투어|항공|숙박|리조트|펜션|호텔|렌터카|입장권|이용권|티켓|여행|워터파크|캠프|공연|전시/;
+function poolKeep(name: string, path: string, total: number) {
+  const hay = `${name} ${path}`;
+  if (POOL_TRAVEL.test(hay)) return false;
+  if (/기타/.test(hay)) return false;
+  if (total < 1000 || total > 1500000) return false;
+  return true;
+}
+
+// 기준에 안 맞게 된 기존 후보 정리 (기준을 조일 때마다 자동 반영)
+async function poolPrune() {
+  if (!SB_URL || !SB_SERVICE_KEY) return 0;
+  const rows = await getDiscoveryPool(200);
+  const bad = rows.filter((r: any) => !poolKeep(r.keyword, r.naver_cat || "", r.total || 0));
+  for (const r of bad) await keywordForget(r.keyword);
+  return bad.length;
+}
+
+// 키워드 1개를 추적·스냅샷에서 완전히 제거
+async function keywordForget(keyword: string) {
+  if (!SB_URL || !SB_SERVICE_KEY || !keyword) return;
+  const h = { apikey: SB_SERVICE_KEY, Authorization: `Bearer ${SB_SERVICE_KEY}` };
+  const kq = encodeURIComponent(keyword);
+  try {
+    await fetch(`${SB_URL}/rest/v1/keyword_snapshot?keyword=eq.${kq}`, { method: "DELETE", headers: h });
+    await fetch(`${SB_URL}/rest/v1/keyword_track?keyword=eq.${kq}`, { method: "DELETE", headers: h });
+  } catch (_) { /* 무시 */ }
+}
+
 async function poolUpsert(rows: any[]) {
   if (!SB_URL || !SB_SERVICE_KEY || !rows.length) return;
   await fetch(`${SB_URL}/rest/v1/keyword_track?on_conflict=keyword`, {
@@ -536,7 +569,7 @@ async function refreshDiscoveryPool() {
       const n = await normalizeByNaver(t);
       if (!n) continue;
       if (seen.has(n.name)) continue;                    // 시드/중복 제외
-      if (n.total < 1000 || n.total > 3000000) continue; // 너무 희소하거나 너무 일반적
+      if (!poolKeep(n.name, n.path, n.total)) continue;
       seen.add(n.name);
       rows.push({
         keyword: n.name, source: "coupang", naver_cat: n.path,
@@ -545,7 +578,8 @@ async function refreshDiscoveryPool() {
     } catch (_) { /* 개별 실패 무시 */ }
   }
   await poolUpsert(rows);
-  return { products: products.length, tokens: tokens.size, added: rows.length,
+  const pruned = await poolPrune();          // 기준 강화분을 기존 풀에도 소급 적용
+  return { products: products.length, tokens: tokens.size, added: rows.length, pruned,
            sample: rows.slice(0, 12).map((r) => `${r.keyword}(${r.total})`) };
 }
 
@@ -737,6 +771,18 @@ Deno.serve(async (req) => {
       const limit = Math.min(parseInt(q.get("limit") || "80"), 200);
       const rows = await getDiscoveryPool(limit);
       return json({ success: true, count: rows.length, data: rows });
+    }
+    // 잘못 등록된 키워드 제거 (추적·스냅샷에서 완전히 삭제)
+    if (path === "/api/keyword/forget") {
+      const kw = q.get("q");
+      if (!kw) return json({ error: "q required" }, 400);
+      await keywordForget(kw);
+      return json({ success: true, forgot: kw });
+    }
+    // 현재 기준으로 후보 풀만 재정리(쿠팡 재수집 없이)
+    if (path === "/api/discovery/pool/prune") {
+      const pruned = await poolPrune();
+      return json({ success: true, pruned });
     }
 
     // ===== 수집 상태 점검 (크론이 조용히 죽었는지 확인용) =====
