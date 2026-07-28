@@ -404,7 +404,8 @@
       </div>
       <div class="card-b">
         <div class="card-t" style="margin-bottom:10px">다음 액션</div>
-        <button class="act-btn primary" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
+        <button class="act-btn primary" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
+        <button class="act-btn" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
         <button class="act-btn" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
         <button class="act-btn" onclick="addWatch()"><span class="ai-ico">🔔</span> 관심 상품 추가</button>
         <button class="act-btn" onclick="openPlan()"><span class="ai-ico">📥</span> 리포트 다운로드</button>
@@ -1263,6 +1264,114 @@ function downloadPlan(){
   a.href=u; a.download=`기획안_${pl.name.replace(/[\\/:*?"<>|]/g,'').slice(0,30)}_${new Date().toISOString().slice(0,10)}.txt`;
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
 }
+// ===================== ⑥ 블로그 글 초안 (실데이터 기반·규칙기반) =====================
+// 발굴에서 끝내지 않고 수익화로 잇는 첫 단계.
+// 원칙: 실측값만 쓴다. 없는 수치는 문장을 아예 만들지 않는다(리뷰수·판매량은 원천이 없음).
+// 제휴 링크를 넣을 경우 공정위 표시 의무가 있으므로 문구를 항상 함께 넣는다.
+function buildPost(){
+  const p=state.products[state.selected]||{};
+  const kw=state.query;
+  const prices=state.products.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
+  const min=prices[0]||0, max=prices[prices.length-1]||0;
+  const med=prices.length?prices[Math.floor(prices.length/2)]:0;
+  const avg=prices.length?Math.round(prices.reduce((a,b)=>a+b,0)/prices.length):0;
+  const [cl]=compLabel(state.total), sz=sizeLabel(state.total);
+  const date=new Date().toLocaleDateString('ko-KR');
+
+  // 트렌드 — 완결 구간 기준(집계 중인 구간 제외)
+  let trendLine='';
+  if(state.trend && state.trend.length>=2){
+    const ch=Math.round(pctChange(state.trend,5)||0);
+    const dir=ch>8?'늘고':ch<-8?'줄고':'비슷하고';
+    trendLine=`${state.trendCat||'해당 분야'} 검색량은 최근 6개월 기준 ${dir} 있습니다(${ch>0?'+':''}${ch}%).`;
+  }
+  // 우리가 직접 쌓은 스냅샷 — 2일 이상일 때만 언급
+  let snapLine='';
+  const ser=snapMerge(snapSeries(kw), (state.snapCache&&state.snapCache.kw===kw)?state.snapCache.rows:[]);
+  if(ser.length>=2){
+    const a=ser[0], b=ser[ser.length-1];
+    const dt=a.t?Math.round((b.t-a.t)/a.t*100):0;
+    const dm=a.m?Math.round((b.m-a.m)/a.m*100):0;
+    snapLine=`직접 ${ser.length}일간 기록한 결과, 매물 수는 ${dt>0?'+':''}${dt}%, 가격 중앙값은 ${dm>0?'+':''}${dm}% 움직였습니다.`;
+  }
+  // 가격 구간 분포 — 어디가 비어 있는지가 독자에게 실질 정보
+  const bk=[['3만원 미만',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원 이상',100000,Infinity]];
+  const cnt=bk.map(b=>prices.filter(x=>x>=b[1]&&x<b[2]).length);
+  const distLines=bk.map((b,i)=>`- ${b[0]}: ${cnt[i]}개`).join('\n');
+  const topBand=bk[cnt.indexOf(Math.max(...cnt))][0];
+
+  const items=state.products.slice(0,5);
+  const listLines=items.map((x,i)=>`${i+1}. ${x.name}\n   가격 ${won(x.price)}${x.brand?' · '+x.brand:''}\n   ${x.link||''}`).join('\n\n');
+
+  const title=`${kw} 가격대 정리 — 지금 얼마에 사는 게 적당할까 (${date} 기준)`;
+  const text =
+`${title}
+
+${kw} 살까 말까 고민하다가, 오늘 기준으로 실제 판매 중인 상품들의 가격을 직접 확인해봤습니다.
+느낌이 아니라 숫자로 정리했습니다.
+
+■ 오늘 기준 시세 (네이버쇼핑 실측)
+- 등록된 상품 수: ${state.total!=null?state.total.toLocaleString():'-'}개
+- 최저가: ${won(min)}
+- 중앙값: ${won(med)}   ← 가장 무난한 기준
+- 평균가: ${won(avg)}
+- 최고가: ${won(max)}
+
+가장 상품이 많은 구간은 ${topBand}입니다.
+중앙값인 ${won(med)} 근처면 무난하고, 이보다 많이 싸면 구성이나 용량을 꼭 확인해보세요.
+
+■ 가격 구간별 상품 수
+${distLines}
+
+■ 시장 분위기
+- 경쟁 강도: ${cl} (상품이 많을수록 선택지는 넓지만 고르기는 어렵습니다)
+- 시장 규모: ${sz}
+${trendLine?'- '+trendLine:''}
+${snapLine?'- '+snapLine:''}
+
+■ 오늘 확인한 상품들
+${listLines}
+
+■ 정리
+${kw}는 오늘 기준 ${won(med)} 안팎이면 적정선으로 보입니다.
+${cnt[0]>0?`저렴하게 보려면 3만원 미만 구간에 ${cnt[0]}개가 있으니 이쪽부터 비교해보셔도 좋습니다.`:''}
+가격은 매일 바뀌니, 구매 시점에 다시 한 번 확인하시길 권합니다.
+
+──────────────────────────────
+※ 이 글의 가격·상품 수는 ${date} 네이버쇼핑에서 직접 조회한 값입니다.
+※ 평점과 리뷰 수는 제공되는 원천이 없어 넣지 않았습니다.
+`;
+  const html = text.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/^(■.*)$/gm,'<h3>$1</h3>')
+    .replace(/\n/g,'<br>');
+  return { title, kw, text, html };
+}
+function openPost(){
+  const po=buildPost(); window.__post=po;
+  const pre=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;line-height:1.6;margin:0;color:var(--text)">${po.text.replace(/</g,'&lt;')}</pre>`;
+  const body=`<div class="tabnote" style="padding:0 0 10px;line-height:1.6">
+      실측값만 사용합니다. 원천이 없는 평점·리뷰수·판매량은 문장 자체를 만들지 않습니다.<br>
+      <b>제휴 링크를 넣으신다면</b> 아래 문구를 반드시 함께 넣어야 합니다(공정위 표시 의무).
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px;font-size:11.5px;margin-bottom:12px">
+      이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
+      <button class="seln" style="margin-left:6px" onclick="copyText('이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.')">복사</button>
+    </div>`+pre+
+    `<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button class="go" style="flex:1;min-width:120px" onclick="copyText(window.__post.text)">📋 글 복사</button>
+      <button class="go" style="flex:1;min-width:120px;background:var(--purple)" onclick="copyText(window.__post.html)">🧩 HTML 복사</button>
+      <button class="go" style="flex:1;min-width:120px;background:var(--green)" onclick="downloadPost()">📥 다운로드</button>
+    </div>`;
+  showModal('✍️ 블로그 글 초안 · '+po.kw, body, 'postOv', 'wide');
+}
+function copyText(t){ navigator.clipboard.writeText(t).then(()=>alert('복사했습니다 📋')).catch(()=>alert('복사 실패 — 다운로드를 이용하세요')); }
+function downloadPost(){
+  const po=window.__post; const blob=new Blob([po.text],{type:'text/plain;charset=utf-8'});
+  const u=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=u; a.download=`블로그초안_${po.kw.replace(/[\\/:*?"<>|]/g,'').slice(0,30)}_${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
+}
+
 function searchSupplier(){
   const p=state.products[state.selected]; const q=encodeURIComponent((p?p.name:state.query)+' 도매 공급처');
   window.open('https://search.naver.com/search.naver?query='+q,'_blank','noopener');
