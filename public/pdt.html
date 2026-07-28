@@ -1424,15 +1424,38 @@ function openMargin(){
       <button class="seln" onclick="mgPreset('coupangHigh')">🔵 쿠팡 (고율 10.9%)</button>
       <button class="seln" onclick="mgPreset('clear')">지우기</button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr;gap:0">
-      ${f('mgSell','판매가', price, '원','고객이 결제하는 금액(배송비 별도)')}
-      ${f('mgCost','매입 원가', Math.round(price*0.4), '원','사입 단가 + 부자재')}
-      ${f('mgShip','내가 부담하는 배송비', 3000, '원','무료배송이면 실제 택배비, 유료면 0')}
-      ${f('mgFee','플랫폼 수수료', 0, '%','스마트스토어·쿠팡 판매수수료 (카테고리별 상이)')}
-      ${f('mgPay','결제 수수료', 0, '%','카드·간편결제 수수료')}
-      ${f('mgAd','광고비', 0, '%','매출 대비 광고 지출 비율')}
-      ${f('mgRet','반품·불량률', 0, '%','반품 시 왕복 배송비와 손실 반영')}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px;align-items:center">
+      <span style="font-size:11.5px;color:var(--sub);font-weight:700">과세유형</span>
+      <select id="mgTax" onchange="calcMargin()" style="padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:700">
+        <option value="general">일반과세자 (매입 부가세 환급)</option>
+        <option value="simple">간이과세자·면세 (환급 없음)</option>
+      </select>
+      <span style="font-size:11.5px;color:var(--sub);font-weight:700;margin-left:8px">매입</span>
+      <select id="mgSrc" onchange="mgToggleImport();calcMargin()" style="padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:700">
+        <option value="dom">국내 사입</option>
+        <option value="imp">해외 수입</option>
+      </select>
     </div>
+    <div class="card-t" style="margin:6px 0 6px">매출</div>
+    ${f('mgSell','판매가', price, '원','고객이 결제하는 금액(부가세 포함, 배송비 별도)')}
+    <div class="card-t" style="margin:10px 0 6px">매입 원가</div>
+    ${f('mgCost','매입 단가', Math.round(price*0.4), '원','국내는 부가세 포함가, 수입은 현지 매입가')}
+    <div id="mgImpBox" style="display:none">
+      ${f('mgIntl','국제운송·통관비', 0, '원','개당으로 환산 — 항공/해상운임 + 통관수수료')}
+      ${f('mgDuty','관세율', 0, '%','품목별로 다름 — 관세청 품목분류에서 확인')}
+    </div>
+    <div class="card-t" style="margin:10px 0 6px">물류·처리</div>
+    ${f('mgShip','내가 부담하는 배송비', 3000, '원','무료배송이면 실제 택배비, 유료면 0')}
+    ${f('mgPack','포장비', 0, '원','박스·완충재·테이프·라벨 개당')}
+    ${f('mgLabor','인건비', 0, '원','포장·출고에 드는 시간 × 시급을 개당으로')}
+    ${f('mgStore','보관비', 0, '원','창고·3PL 비용을 개당으로')}
+    <div class="card-t" style="margin:10px 0 6px">플랫폼</div>
+    ${f('mgFee','플랫폼 수수료', 0, '%','스마트스토어·쿠팡 판매수수료 (카테고리별 상이)')}
+    ${f('mgPay','결제 수수료', 0, '%','카드·간편결제 수수료')}
+    ${f('mgAd','광고비', 0, '%','매출 대비 광고 지출 비율')}
+    <div class="card-t" style="margin:10px 0 6px">손실</div>
+    ${f('mgRet','반품률', 0, '%','반품 시 왕복 배송비 발생')}
+    ${f('mgDead','반품 중 재판매 불가', 0, '%','개봉·훼손으로 폐기하는 비율')}
     <div id="mgPresetNote" style="font-size:11px;color:var(--primary);font-weight:700;margin-top:2px"></div>
     <div id="mgOut" style="margin-top:12px"></div>
     <div class="tabnote" style="padding:10px 0 0;line-height:1.6">
@@ -1464,38 +1487,63 @@ function mgPreset(k){
   if(n) n.innerHTML = p.note ? `적용됨 · ${p.note}` : '';
   calcMargin();
 }
+function mgToggleImport(){
+  const box=document.getElementById('mgImpBox');
+  const imp=((document.getElementById('mgSrc')||{}).value)==='imp';
+  if(box) box.style.display = imp ? 'block' : 'none';
+}
+// 총원가 정밀 계산
+//  ⚠️ 부가세 처리가 핵심이다. 일반과세자는 매입 부가세를 환급받으므로
+//     판매가·매입가를 '공급가액'(÷1.1)으로 환산해야 실제 손에 남는 돈이 나온다.
+//     간이과세자·면세사업자는 환급이 없어 그대로 계산한다.
+//     관세는 환급되지 않으므로 원가에 그대로 더한다(수입 부가세는 환급되어 제외).
+//  ※ 세무 처리는 사업자 유형·업종에 따라 달라집니다. 세무사 확인이 필요합니다.
+function mgCalcCore(sell, p){
+  const D = p.general ? 1.1 : 1;                 // 부가세 환급 계수
+  const rev = sell / D;                          // 실질 매출(공급가)
+  const unitCost = p.imported
+    ? (p.cost + p.intl) * (1 + p.duty)           // 관세 포함, 수입 부가세는 환급되어 제외
+    : p.cost / D;                                // 국내 사입가는 부가세 환급
+  const logistics = p.ship/D + p.pack/D + p.store/D + p.labor;   // 인건비는 매입세액 없음
+  const platform = rev * (p.fee + p.pay + p.ad);
+  const loss = p.ret * ( (p.ship*2)/D + unitCost*p.dead );       // 왕복 배송비 + 재판매 불가분
+  const profit = rev - unitCost - logistics - platform - loss;
+  return { D, rev, unitCost, logistics, platform, loss, profit,
+           rate: rev ? profit/rev*100 : 0 };
+}
 function calcMargin(){
   const g=id=>parseFloat((document.getElementById(id)||{}).value)||0;
-  const sell=g('mgSell'), cost=g('mgCost'), ship=g('mgShip');
-  const fee=g('mgFee')/100, pay=g('mgPay')/100, ad=g('mgAd')/100, ret=g('mgRet')/100;
+  const v=id=>((document.getElementById(id)||{}).value)||'';
   const el=document.getElementById('mgOut'); if(!el) return;
+  const sell=g('mgSell');
   if(sell<=0){ el.innerHTML='<div class="tabnote">판매가를 입력하세요.</div>'; return; }
-  const feeAmt=sell*fee, payAmt=sell*pay, adAmt=sell*ad;
-  // 반품은 매출은 사라지고 왕복 배송비만 남는다고 본다(보수적)
-  const retAmt=ret*(ship*2);
-  const profit=sell-cost-ship-feeAmt-payAmt-adAmt-retAmt;
-  const rate=sell?profit/sell*100:0;
-  // 손익분기 판매가 — 변동비 비율을 제외한 나머지로 고정비를 덮는 지점
-  const varRate=fee+pay+ad;
-  const be=(1-varRate)>0 ? (cost+ship+retAmt)/(1-varRate) : 0;
-  const tone = rate>=20?['var(--green)','좋음'] : rate>=10?['var(--amber)','보통'] : rate>0?['var(--red)','빠듯함'] : ['var(--red)','적자'];
-  const row=(l,v,neg)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line2);font-size:12px">
-      <span style="color:var(--sub)">${l}</span><b style="color:${neg?'var(--red)':'var(--text)'}">${neg?'−':''}${Math.round(v).toLocaleString()}원</b></div>`;
+  const p={ cost:g('mgCost'), intl:g('mgIntl'), duty:g('mgDuty')/100,
+            ship:g('mgShip'), pack:g('mgPack'), labor:g('mgLabor'), store:g('mgStore'),
+            fee:g('mgFee')/100, pay:g('mgPay')/100, ad:g('mgAd')/100,
+            ret:g('mgRet')/100, dead:g('mgDead')/100,
+            general:v('mgTax')==='general', imported:v('mgSrc')==='imp' };
+  const r=mgCalcCore(sell, p);
+  // 손익분기 판매가: 매출 공급가에서 변동비율을 뺀 나머지가 고정원가를 덮는 지점
+  const varRate=p.fee+p.pay+p.ad;
+  const be=(1-varRate)>0 ? r.D*(r.unitCost+r.logistics+r.loss)/(1-varRate) : 0;
+  const tone = r.rate>=20?['var(--green)','좋음'] : r.rate>=10?['var(--amber)','보통'] : r.rate>0?['var(--red)','빠듯함'] : ['var(--red)','적자'];
+  const row=(l,val,neg,sub)=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line2);font-size:12px">
+      <span style="color:var(--sub)">${l}${sub?`<span style="font-size:10px;color:var(--muted)"> ${sub}</span>`:''}</span>
+      <b style="color:${neg?'var(--red)':'var(--text)'}">${neg?'−':''}${Math.round(val).toLocaleString()}원</b></div>`;
+  const vatNote = p.general ? '부가세 제외(공급가)' : '';
   el.innerHTML=`
     <div style="background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px">
-      ${row('판매가', sell)}
-      ${row('매입 원가', cost, 1)}
-      ${row('배송비', ship, 1)}
-      ${row('플랫폼 수수료', feeAmt, 1)}
-      ${row('결제 수수료', payAmt, 1)}
-      ${row('광고비', adAmt, 1)}
-      ${row('반품 손실(추정)', retAmt, 1)}
+      ${row('실질 매출', r.rev, 0, vatNote)}
+      ${row('매입 원가', r.unitCost, 1, p.imported?`관세 ${(p.duty*100).toFixed(1)}% 포함`:vatNote)}
+      ${row('물류·처리', r.logistics, 1, '배송·포장·인건·보관')}
+      ${row('플랫폼 수수료·광고', r.platform, 1, `합 ${(varRate*100).toFixed(2)}%`)}
+      ${row('반품 손실', r.loss, 1, p.dead>0?`재판매 불가 ${(p.dead*100).toFixed(0)}% 반영`:'왕복 배송비')}
       <div style="display:flex;justify-content:space-between;padding:10px 0 2px;font-size:14px">
-        <b>건당 순이익</b><b style="color:${tone[0]};font-size:18px">${Math.round(profit).toLocaleString()}원</b>
+        <b>건당 순이익</b><b style="color:${tone[0]};font-size:18px">${Math.round(r.profit).toLocaleString()}원</b>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:12px">
-        <span style="color:var(--sub)">마진율</span>
-        <b style="color:${tone[0]}">${rate.toFixed(1)}% · ${tone[1]}</b>
+        <span style="color:var(--sub)">마진율 <span style="font-size:10px;color:var(--muted)">실질 매출 대비</span></span>
+        <b style="color:${tone[0]}">${r.rate.toFixed(1)}% · ${tone[1]}</b>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px">
@@ -1506,12 +1554,19 @@ function calcMargin(){
       </div>
       <div style="border:1px solid var(--line);border-radius:9px;padding:10px;text-align:center">
         <div style="font-size:10.5px;color:var(--sub);font-weight:700">100개 판매 시</div>
-        <div style="font-size:16px;font-weight:800;margin-top:3px;color:${tone[0]}">${Math.round(profit*100).toLocaleString()}원</div>
-        <div style="font-size:10px;color:var(--muted)">반품·광고 반영 후</div>
+        <div style="font-size:16px;font-weight:800;margin-top:3px;color:${tone[0]}">${Math.round(r.profit*100).toLocaleString()}원</div>
+        <div style="font-size:10px;color:var(--muted)">모든 비용 반영 후</div>
       </div>
     </div>
-    ${state.med?`<div class="tabnote" style="padding:9px 0 0">시장 중앙값 <b>${won(state.med)}</b> 기준으로 계산하면 마진율이
-      <b>${(()=>{const s=state.med,fa=s*fee,pa=s*pay,aa=s*ad;const pr=s-cost-ship-fa-pa-aa-retAmt;return (s?pr/s*100:0).toFixed(1);})()}%</b>입니다.</div>`:''}`;
+    ${state.med?`<div class="tabnote" style="padding:9px 0 0">시장 중앙값 <b>${won(state.med)}</b>에 팔면 마진율은
+      <b>${mgCalcCore(state.med,p).rate.toFixed(1)}%</b>입니다.</div>`:''}
+    <div class="tabnote" style="padding:8px 0 0;line-height:1.6">
+      ${p.general
+        ? '<b>일반과세자</b> 기준 — 판매가·매입가에서 부가세를 뺀 <b>공급가액</b>으로 계산했습니다(매입 부가세는 환급).'
+        : '<b>간이과세자·면세</b> 기준 — 매입 부가세 환급이 없어 지출액 그대로 반영했습니다.'}
+      ${p.imported?'<br>관세는 환급되지 않아 원가에 포함했고, 수입 부가세는 환급되어 제외했습니다.':''}
+      <br>※ 세무 처리는 사업자 유형·업종에 따라 달라집니다 — <b>세무사 확인이 필요합니다.</b>
+    </div>`;
 }
 
 // ===================== 🏪 내 상품 추적 · 가격 대응 =====================
@@ -1633,11 +1688,13 @@ async function openToday(){
     <div style="display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line2)">
       <div style="flex:0 0 26px;height:26px;border-radius:50%;background:${tone||'var(--primary)'};color:#fff;
                   font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center">${n}</div>
-      <div style="flex:1;min-width:0">
+      <div style="flex:1 1 auto;min-width:0">
         <div style="font-weight:800;font-size:13px">${title}</div>
         <div style="font-size:11.5px;color:var(--sub);line-height:1.55;margin-top:2px">${desc}</div>
       </div>
-      <button class="go" style="flex:0 0 auto;padding:7px 13px;font-size:12px" onclick="closeModal('todayOv');${fn}">${btn}</button>
+      <button style="flex:0 0 auto;width:auto;white-space:nowrap;background:var(--primary);color:#fff;
+                     border:none;border-radius:9px;padding:8px 13px;font-size:12px;font-weight:800;cursor:pointer"
+              onclick="closeModal('todayOv');${fn}">${btn}</button>
     </div>`;
 
   const evLine = ev.length
