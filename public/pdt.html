@@ -1741,13 +1741,43 @@ function pubBodyHTML(t){
     const tags=[...new Set([kw.replace(/\s+/g,''), ...toks.slice(0,5).map(x=>x[0].replace(/\s+/g,''))])]
       .filter(Boolean).map(t=>'#'+t);                       // 중복 태그 제거
     const extra=['#추천템','#가성비','#내돈내산','#일상템'].filter(t=>!tags.includes(t));
-    const cap=window.__cap=`${kw} 찾다가 가격 다 비교해봤어요.
+    const ang=catAngle();
+    const tone=window.__snsTone||'info';
+    const allTags=[...tags, ...extra].join(' ');
+    const caps={
+      info:`${kw} 찾다가 가격 다 비교해봤어요.
 
 지금 시장가는 최저 ${won(min)}, 보통 ${won(med)} 정도예요.
-${won(med)} 근처면 무난하고, 너무 싸면 구성이나 용량 꼭 확인하세요.
+${won(med)} 근처면 무난하고, 너무 싸면 ${ang.check[0]} 꼭 확인하세요.
 
-${[...tags, ...extra].join(' ')}`;
-    return `<div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+고를 때 볼 것 👇
+${ang.check.slice(0,3).map(c=>'· '+c).join('\n')}
+
+${allTags}`,
+      review:`${kw} 써본 후기 남겨요 🙌
+
+(여기에 실제 사용 경험 2~3줄)
+
+✅ 좋았던 점 :
+❌ 아쉬운 점 :
+💰 구매가 : ${won((state.products[0]||{}).price||med)} (시장 중앙값 ${won(med)})
+
+${allTags}`,
+      tip:`${kw} 고를 때 이것만 보세요 ✍️
+
+${ang.check.map((c,i)=>`${i+1}. ${c}`).join('\n')}
+
+💡 ${ang.tip}
+지금 시세는 ${won(min)}~${won(max)}, 보통 ${won(med)}이에요.
+
+${allTags}`,
+    };
+    const cap=window.__cap=caps[tone];
+    const btns=[['info','📊 정보형'],['review','✍️ 후기형'],['tip','💡 팁형']]
+      .map(([v,l])=>`<button class="seln ${tone===v?'on':''}" onclick="window.__snsTone='${v}';pubTab('sns',null)">${l}</button>`).join(' ');
+    return `<div style="display:flex;gap:5px;margin-bottom:10px">${btns}</div>
+      <div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+        카테고리 <b style="color:var(--primary)">${state.cat1||'미확정'}</b>에 맞춘 확인 항목이 들어갑니다.
         캡션의 <b>가격 수치는 실측</b>입니다. 다만 <b>해시태그는 인기도를 측정한 게 아니라</b>
         상품명에서 뽑은 단어와 일반적인 태그입니다 — 인스타 노출량 데이터는 확보 경로가 없습니다.
       </div>
@@ -1849,7 +1879,30 @@ function downloadPlan(){
 // 발굴에서 끝내지 않고 수익화로 잇는 첫 단계.
 // 원칙: 실측값만 쓴다. 없는 수치는 문장을 아예 만들지 않는다(리뷰수·판매량은 원천이 없음).
 // 제휴 링크를 넣을 경우 공정위 표시 의무가 있으므로 문구를 항상 함께 넣는다.
-function buildPost(){
+// 카테고리마다 독자가 궁금해하는 지점이 다르다. 실측으로 못 채우는 항목은
+// 빈칸(폼)으로 남겨 직접 채우게 한다 — 지어내는 것보다 낫다.
+const CAT_ANGLE={
+  '식품':          { unit:'100g당', check:['총 용량·중량','유통기한','보관 방법','원산지','1회 섭취량·칼로리'], tip:'단위당 가격(100g당)으로 비교하면 설득력이 큽니다' },
+  '화장품/미용':   { unit:'10ml당', check:['용량(ml)','주요 성분','맞는 피부 타입','향','사용 순서·양'],       tip:'용량당 가격과 성분을 함께 쓰면 신뢰가 올라갑니다' },
+  '디지털/가전':   { unit:'',       check:['핵심 스펙','호환 기기','A/S 기간','소비전력·배터리','구성품'],      tip:'스펙 표를 만들어 경쟁 제품과 나란히 두면 좋습니다' },
+  '패션의류':      { unit:'',       check:['사이즈 실측','소재·혼용률','세탁 방법','핏(정사이즈/여유)','계절감'], tip:'실측 사이즈를 밝히면 반품이 크게 줄어듭니다' },
+  '패션잡화':      { unit:'',       check:['크기·수납','소재','무게','착용감','색상 실물차'],                  tip:'무게와 실물 색감 언급이 반품을 줄입니다' },
+  '생활/건강':     { unit:'개당',   check:['수량·용량','성분·인증','사용 주기','보관','재구매 주기'],           tip:'개당 단가로 환산하면 대용량의 이점이 드러납니다' },
+  '출산/육아':     { unit:'',       check:['권장 연령·개월','안전 인증(KC)','세척·소독','소재 안전성','무게'],  tip:'안전 인증 번호를 밝히면 신뢰가 크게 올라갑니다' },
+  '스포츠/레저':   { unit:'',       check:['무게','수납 크기','내구성·하중','휴대성','설치 난이도'],            tip:'무게와 접었을 때 크기는 거의 모두가 궁금해합니다' },
+  '가구/인테리어': { unit:'',       check:['정확한 치수','조립 난이도','재질·마감','하중','배송 형태'],          tip:'치수를 mm 단위로 밝히고 배송 방식을 꼭 적으세요' },
+};
+function catAngle(){ return CAT_ANGLE[state.cat1] || CAT_ANGLE[state.trendCat] ||
+  { unit:'', check:['핵심 사양','구성품','사용 방법','주의사항','A/S'], tip:'경쟁 상품이 안 밝히는 항목을 밝히면 그 자체가 차별점입니다' }; }
+
+const POST_TYPES=[
+  ['price','💰 가격비교형','오늘 시세와 적정가를 정리 — 실데이터가 가장 많이 들어갑니다'],
+  ['guide','🧭 구매가이드형','고르는 기준을 알려주는 글 — 검색 유입이 오래갑니다'],
+  ['review','✍️ 리뷰형','직접 써본 경험 중심 — 빈칸을 채워 완성하세요'],
+  ['list','🏅 추천 N선','여러 개를 비교해 고르는 글 — 제휴 링크와 궁합이 좋습니다'],
+];
+
+function buildPost(type){
   const p=state.products[state.selected]||{};
   const kw=state.query;
   const prices=state.products.map(x=>x.price).filter(Boolean).sort((a,b)=>a-b);
@@ -1884,6 +1937,125 @@ function buildPost(){
   const items=state.products.slice(0,5);
   const listLines=items.map((x,i)=>`${i+1}. ${x.name}\n   가격 ${won(x.price)}${x.brand?' · '+x.brand:''}\n   ${x.link||''}`).join('\n\n');
 
+  const ang=catAngle();
+  const checkList=ang.check.map(c=>`- ${c}: `).join('\n');
+  const T=type||'price';
+  const foot=`
+──────────────────────────────
+※ 이 글의 가격·상품 수는 ${date} 네이버쇼핑에서 직접 조회한 값입니다.
+※ 평점과 리뷰 수는 제공되는 원천이 없어 넣지 않았습니다.
+`;
+  const mkt=
+`■ 오늘 기준 시세 (네이버쇼핑 실측)
+- 등록된 상품 수: ${state.total!=null?state.total.toLocaleString():'-'}개
+- 최저가: ${won(min)}
+- 중앙값: ${won(med)}   ← 가장 무난한 기준
+- 평균가: ${won(avg)}
+- 최고가: ${won(max)}`;
+
+  // ── 구매가이드형: 고르는 기준 중심(검색 유입이 오래 간다)
+  if(T==='guide'){
+    const title=`${kw} 고르는 법 — 사기 전에 꼭 확인할 ${ang.check.length}가지`;
+    const text=
+`${title}
+
+${kw} 처음 사시면 뭘 봐야 할지 막막하시죠. 오늘 시세를 확인하면서 정리한 기준입니다.
+
+■ 사기 전 확인할 것
+${ang.check.map((c,i)=>`${i+1}. ${c}\n   → (내 기준·경험을 여기에 적으세요)`).join('\n')}
+
+💡 ${ang.tip}
+
+${mkt}
+
+지금은 ${won(med)} 근처가 무난합니다. 이보다 크게 싸다면 ${ang.check[0]}을(를) 꼭 확인하세요.
+
+■ 가격대별로 뭐가 다른가
+${distLines}
+
+■ 이런 분께 추천
+- (여기에 대상 독자를 적으세요)
+
+■ 이런 분께는 비추천
+- (솔직하게 적을수록 신뢰가 올라갑니다)
+${foot}`;
+    return { title, kw, text, html:mkHtml(text), type:T };
+  }
+
+  // ── 리뷰형: 경험은 지어낼 수 없으므로 빈칸 폼으로 제공
+  if(T==='review'){
+    const p0=state.products[0]||{};
+    const title=`${kw} 솔직 후기 — ${won(p0.price||med)}에 사봤습니다`;
+    const text=
+`${title}
+
+■ 구매 이유
+- (왜 필요했는지 한 문단)
+
+■ 얼마에 샀나
+- 구매가: ${won(p0.price||med)}
+- 오늘 시장 중앙값: ${won(med)} (최저 ${won(min)})
+- 잘 산 편인지: (중앙값 대비 어땠는지 한 줄)
+
+■ 개봉·첫인상
+- (사진 자리)
+
+■ 항목별 체크
+${checkList}
+
+■ 좋았던 점
+1.
+2.
+
+■ 아쉬운 점
+1.
+2.
+   ※ 아쉬운 점을 솔직히 쓸수록 글의 신뢰도가 올라갑니다
+
+■ 이런 분께 추천
+-
+
+■ 총평
+- 별점: ★★★★☆ (직접 매겨주세요)
+- 재구매 의향:
+
+💡 ${ang.tip}
+${foot}`;
+    return { title, kw, text, html:mkHtml(text), type:T };
+  }
+
+  // ── 추천 N선: 실제 검색된 상품으로 목록을 만든다
+  if(T==='list'){
+    const n=Math.min(5, items.length);
+    const title=`${kw} 추천 ${n}선 — ${date} 기준 실제 판매가 비교`;
+    const picks=items.slice(0,n).map((x,i)=>{
+      const dv=med?Math.round((x.price-med)/med*100):0;
+      return `${i+1}. ${x.name}
+   가격: ${won(x.price)} (중앙값 대비 ${dv>0?'+':''}${dv}%)
+   ${x.brand?'브랜드: '+x.brand+'\n   ':''}추천 포인트: (직접 적어주세요)
+   ${x.link||''}`;
+    }).join('\n\n');
+    const text=
+`${title}
+
+${kw}을(를) 찾다가 실제 판매 중인 상품들의 가격을 비교했습니다.
+${mkt}
+
+■ 추천 ${n}선
+${picks}
+
+■ 고를 때 볼 것
+${ang.check.map(c=>`- ${c}`).join('\n')}
+
+💡 ${ang.tip}
+
+■ 정리
+가격만 보면 ${won(min)}부터 있지만, ${won(med)} 근처가 무난합니다.
+${foot}`;
+    return { title, kw, text, html:mkHtml(text), type:T };
+  }
+
+  // ── 기본: 가격비교형
   const title=`${kw} 가격대 정리 — 지금 얼마에 사는 게 적당할까 (${date} 기준)`;
   const text =
 `${title}
@@ -1913,25 +2085,37 @@ ${snapLine?'- '+snapLine:''}
 ■ 오늘 확인한 상품들
 ${listLines}
 
+■ 살 때 확인할 것 (${state.cat1||'일반'} 기준)
+${ang.check.map(c=>`- ${c}`).join('\n')}
+
+💡 ${ang.tip}
+
 ■ 정리
 ${kw}는 오늘 기준 ${won(med)} 안팎이면 적정선으로 보입니다.
 ${cnt[0]>0?`저렴하게 보려면 3만원 미만 구간에 ${cnt[0]}개가 있으니 이쪽부터 비교해보셔도 좋습니다.`:''}
 가격은 매일 바뀌니, 구매 시점에 다시 한 번 확인하시길 권합니다.
-
-──────────────────────────────
-※ 이 글의 가격·상품 수는 ${date} 네이버쇼핑에서 직접 조회한 값입니다.
-※ 평점과 리뷰 수는 제공되는 원천이 없어 넣지 않았습니다.
-`;
-  const html = text.replace(/&/g,'&amp;').replace(/</g,'&lt;')
+${foot}`;
+  return { title, kw, text, html:mkHtml(text), type:T };
+}
+function mkHtml(text){
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/^(■.*)$/gm,'<h3>$1</h3>')
     .replace(/\n/g,'<br>');
-  return { title, kw, text, html };
 }
-function openPost(){
-  const po=buildPost(); window.__post=po;
+function openPost(type){
+  const T=type||'price';
+  const po=buildPost(T); window.__post=po;
+  const ang=catAngle();
   const pre=`<pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;line-height:1.6;margin:0;color:var(--text)">${po.text.replace(/</g,'&lt;')}</pre>`;
-  const body=`<div class="tabnote" style="padding:0 0 10px;line-height:1.6">
-      실측값만 사용합니다. 원천이 없는 평점·리뷰수·판매량은 문장 자체를 만들지 않습니다.<br>
+  const picker=`<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">
+      ${POST_TYPES.map(([v,l,d])=>`<button class="seln ${T===v?'on':''}" title="${d}" onclick="openPost('${v}')">${l}</button>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+      ${POST_TYPES.find(x=>x[0]===T)[2]} · 카테고리 <b style="color:var(--primary)">${state.cat1||'미확정'}</b>에 맞춰
+      확인 항목(${ang.check.slice(0,3).join(', ')} 등)이 들어갑니다.
+    </div>`;
+  const body=picker+`<div class="tabnote" style="padding:0 0 10px;line-height:1.6">
+      실측값만 사용합니다. 원천이 없는 평점·리뷰수·판매량은 문장 자체를 만들지 않고 <b>빈칸으로 남겨</b> 직접 채우게 합니다.<br>
       <b>제휴 링크를 넣으신다면</b> 아래 문구를 반드시 함께 넣어야 합니다(공정위 표시 의무).
     </div>
     <div style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px;font-size:11.5px;margin-bottom:12px">
@@ -1944,6 +2128,7 @@ function openPost(){
       <button class="go" style="flex:1;min-width:120px;background:var(--green)" onclick="downloadPost()">📥 다운로드</button>
     </div>`;
   showModal('✍️ 블로그 글 초안 · '+po.kw, body, 'postOv', 'wide');
+  const m=document.querySelector('#postOv .modal-b'); if(m) m.scrollTop=0;
 }
 function copyText(t){ navigator.clipboard.writeText(t).then(()=>alert('복사했습니다 📋')).catch(()=>alert('복사 실패 — 다운로드를 이용하세요')); }
 function downloadPost(){
