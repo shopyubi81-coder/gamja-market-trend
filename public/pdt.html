@@ -1557,6 +1557,11 @@ async function myCheck(m,i){
     const dv=med?Math.round((m.price-med)/med*100):0;
     let t,c,note;
     if(!m.price){ t='가격 미입력'; c='var(--muted)'; note='내 판매가를 넣어야 비교됩니다'; }
+    // 시장 대비 위치보다 먼저 볼 것 — 손익분기 아래면 팔수록 손해다
+    else if(floor && m.price < floor){
+      t='⚠️ 적자 판매 중'; c='var(--red)';
+      note=`하한 ${won(floor)}보다 ${won(floor-m.price)} 낮음 — 시장에서 싸 보여도 팔수록 손해입니다`;
+    }
     else if(m.price<=min){ t='최저가 수준'; c='var(--green)'; note='더 내릴 이유 없음 — 마진 확보에 집중'; }
     else if(dv<=-10){ t='시장보다 저렴'; c='var(--green)'; note=`중앙값 대비 ${dv}% — 가격 우위`; }
     else if(dv<=10){ t='시장 평균권'; c='var(--amber)'; note='가격 외 요소(배송·상세·리뷰)로 차별화 필요'; }
