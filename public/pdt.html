@@ -329,6 +329,7 @@
         <div class="rail-lbl">탐색</div>
         <div class="rail-item disc" onclick="navMenu(this,'sourcing')"><span class="ic">📅</span> 소싱 타이밍 <span class="pill g" style="font-size:8px;margin-left:auto">선행</span></div>
         <div class="rail-item disc" onclick="navMenu(this,'events')"><span class="ic">🗓️</span> 이벤트 캘린더 <span class="pill g" style="font-size:8px;margin-left:auto">D-</span></div>
+        <div class="rail-item disc" onclick="navMenu(this,'mine')"><span class="ic">🏪</span> 내 상품 · 가격 대응</div>
         <div class="rail-item disc" onclick="navMenu(this,'discover')"><span class="ic">🎯</span> 오늘의 발굴 <span class="pill g" style="font-size:8px;margin-left:auto">AUTO</span></div>
         <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
         <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">📈</span> 분야 분석·트렌드</div>
@@ -923,6 +924,7 @@ function navMenu(el, mode){
   if(mode==='search'){ const q=document.getElementById('q'); q.focus(); q.select(); }
   else if(mode==='sourcing'){ openSourcing(); }
   else if(mode==='events'){ openEvents(); }
+  else if(mode==='mine'){ openMyProducts(); }
   else if(mode==='discover'){ openDiscovery(); }
   else if(mode==='category'){ openCategoryOverview(); }
   else if(mode==='watch'){ openWatch(); }
@@ -1473,6 +1475,99 @@ function calcMargin(){
     </div>
     ${state.med?`<div class="tabnote" style="padding:9px 0 0">시장 중앙값 <b>${won(state.med)}</b> 기준으로 계산하면 마진율이
       <b>${(()=>{const s=state.med,fa=s*fee,pa=s*pay,aa=s*ad;const pr=s-cost-ship-fa-pa-aa-retAmt;return (s?pr/s*100:0).toFixed(1);})()}%</b>입니다.</div>`:''}`;
+}
+
+// ===================== 🏪 내 상품 추적 · 가격 대응 =====================
+// 핵심: 최저가를 무작정 따라가면 적자가 난다. 원가·수수료로 '내릴 수 있는 하한'을
+// 먼저 계산하고, 그 아래로는 대응하지 말라고 명시적으로 막는다.
+const MYP_KEY='pdt_myproducts';
+function myLoad(){ try{ return JSON.parse(localStorage.getItem(MYP_KEY)||'[]'); }catch(e){ return []; } }
+function mySave(a){ localStorage.setItem(MYP_KEY, JSON.stringify(a)); }
+// 손익분기 판매가 — 마진 계산기와 같은 식
+function breakEven(m){
+  const varRate=((m.fee||0)+(m.pay||0)+(m.ad||0))/100;
+  if((1-varRate)<=0) return 0;
+  return Math.round(((m.cost||0)+(m.ship||0))/(1-varRate));
+}
+function openMyProducts(){
+  const list=myLoad();
+  const rows=list.length ? list.map((m,i)=>`
+    <tr>
+      <td class="nm" style="font-weight:800">${m.kw}<div style="font-size:10.5px;color:var(--muted);font-weight:600">내 판매가 ${won(m.price)} · 원가 ${won(m.cost)}</div></td>
+      <td id="mkt_${i}" style="color:var(--muted)">조회 중…</td>
+      <td id="pos_${i}" style="color:var(--muted)">…</td>
+      <td id="flr_${i}" style="white-space:nowrap">${breakEven(m)?won(breakEven(m))+'<div style="font-size:10px;color:var(--muted)">더 내리면 적자</div>':'<span style="color:var(--red)">계산 불가</span><div style="font-size:10px;color:var(--muted)">수수료 합이 100% 이상</div>'}</td>
+      <td style="white-space:nowrap">
+        <button class="seln" onclick="document.getElementById('q').value='${m.kw.replace(/'/g,'')}';doSearch();closeModal('myOv')">분석</button>
+        <button class="seln" style="color:var(--red);border-color:var(--red)" onclick="myRemove(${i})">삭제</button>
+      </td>
+    </tr>`).join('')
+    : `<tr><td colspan="5" style="padding:14px;color:var(--muted);font-size:12px">아직 등록한 상품이 없습니다. 아래에서 추가하세요.</td></tr>`;
+
+  const inp=(id,ph,val,w)=>`<input id="${id}" placeholder="${ph}" value="${val||''}"
+      style="width:${w};padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:700">`;
+  showModal('🏪 내 상품 · 가격 대응', `
+    <div class="tabnote" style="padding:0 0 9px;line-height:1.6">
+      내가 파는 상품을 등록하면 <b>시장 최저가·중앙값과 내 가격</b>을 비교해 대응 방향을 알려줍니다.<br>
+      <b>가장 중요한 건 '내릴 수 있는 하한'</b>입니다 — 최저가를 무작정 따라가면 팔수록 손해입니다.
+    </div>
+    <div class="ctab-wrap"><table class="ctab"><thead><tr>
+      <th>내 상품</th><th>시장 시세</th><th>내 위치·대응</th><th>가격 하한</th><th></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <div class="card-t" style="margin-bottom:8px">상품 추가</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        ${inp('myKw','검색 키워드 (예: 캠핑 의자)','','190px')}
+        ${inp('myPrice','내 판매가','','110px')}
+        ${inp('myCost','매입 원가','','110px')}
+        ${inp('myShip','배송비','3000','90px')}
+        ${inp('myFee','수수료%','','80px')}
+        ${inp('myPay','결제%','','80px')}
+        ${inp('myAd','광고%','','80px')}
+        <button class="go" style="padding:7px 14px" onclick="myAdd()">추가</button>
+      </div>
+      <div class="tabnote" style="padding:8px 0 0">수수료·결제·광고 비율은 실제 계약 조건을 넣으세요. 비워두면 0으로 계산돼 하한이 낙관적으로 나옵니다.</div>
+    </div>`, 'myOv', 'wide');
+  list.forEach((m,i)=>myCheck(m,i));
+}
+function myAdd(){
+  const v=id=>(document.getElementById(id)||{}).value;
+  const kw=(v('myKw')||'').trim(); if(!kw){ alert('검색 키워드를 입력하세요'); return; }
+  const n=id=>parseFloat(v(id))||0;
+  const list=myLoad();
+  if(list.some(x=>x.kw===kw)){ alert('이미 등록된 키워드입니다'); return; }
+  list.push({ kw, price:n('myPrice'), cost:n('myCost'), ship:n('myShip'), fee:n('myFee'), pay:n('myPay'), ad:n('myAd') });
+  mySave(list); openMyProducts();
+}
+function myRemove(i){ const l=myLoad(); l.splice(i,1); mySave(l); openMyProducts(); }
+// 시장 시세 조회 후 내 가격의 위치와 대응 방향을 판정
+async function myCheck(m,i){
+  const mk=document.getElementById('mkt_'+i), ps=document.getElementById('pos_'+i);
+  if(!mk) return;
+  if(!cfgOK){ mk.textContent='연결 없음'; return; }
+  try{
+    const r=await afetch(`/api/naver/search?q=${encodeURIComponent(m.kw)}&display=20`);
+    const j=await r.json();
+    if(!(j&&j.success&&j.data&&j.data.length)){ mk.textContent='조회 실패'; return; }
+    const prices=j.data.map(x=>x.price||x.priceLow||0).filter(Boolean).sort((a,b)=>a-b);
+    const min=prices[0]||0, med=prices[Math.floor(prices.length/2)]||0;
+    mk.innerHTML=`최저 <b>${won(min)}</b><div style="font-size:10.5px;color:var(--muted)">중앙 ${won(med)} · 매물 ${fmtK(j.total)}</div>`;
+    mk.style.color='var(--text)';
+    const floor=breakEven(m);
+    const dv=med?Math.round((m.price-med)/med*100):0;
+    let t,c,note;
+    if(!m.price){ t='가격 미입력'; c='var(--muted)'; note='내 판매가를 넣어야 비교됩니다'; }
+    else if(m.price<=min){ t='최저가 수준'; c='var(--green)'; note='더 내릴 이유 없음 — 마진 확보에 집중'; }
+    else if(dv<=-10){ t='시장보다 저렴'; c='var(--green)'; note=`중앙값 대비 ${dv}% — 가격 우위`; }
+    else if(dv<=10){ t='시장 평균권'; c='var(--amber)'; note='가격 외 요소(배송·상세·리뷰)로 차별화 필요'; }
+    else{
+      const can = floor && floor < med;
+      t='시장보다 비쌈'; c='var(--red)';
+      note = can ? `중앙값 대비 +${dv}% — ${won(med)}까지 내려도 하한(${won(floor)}) 위`
+                 : `중앙값 대비 +${dv}% — 하한이 ${won(floor)}라 가격 대응 불가, 원가 재협상 필요`;
+    }
+    ps.innerHTML=`<b style="color:${c}">${t}</b><div style="font-size:10.5px;color:var(--muted);white-space:normal;max-width:190px">${note}</div>`;
+  }catch(e){ mk.textContent='조회 실패'; }
 }
 
 // 공통 모달(동적 생성)
