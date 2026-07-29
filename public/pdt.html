@@ -437,7 +437,8 @@
       <button class="act-btn-h primary" onclick="openPublish()"><span class="ai-ico">🚀</span> 발행 센터</button>
       <button class="act-btn-h" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
       <button class="act-btn-h" onclick="openOrder()"><span class="ai-ico">📦</span> 발주량 · 현금흐름</button>
-      <button class="act-btn-h" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
+      <button class="act-btn-h" onclick="openPublish('sns')"><span class="ai-ico">📸</span> 인스타</button>
+      <button class="act-btn-h" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 작성</button>
       <button class="act-btn-h" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
       <button class="act-btn-h" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
       <button class="act-btn-h" onclick="addWatch()"><span class="ai-ico">🔔</span> 관심 상품 추가</button>
@@ -2316,18 +2317,20 @@ function requireProduct(){
   if(!state.query || !state.products.length){ alert('먼저 상품을 검색하세요 🔍'); return false; }
   return true;
 }
-function openPublish(){
+// initTab: 액션 영역에서 '📸 인스타'처럼 특정 탭으로 바로 들어가고 싶을 때 지정
+function openPublish(initTab){
   if(!requireProduct()) return;
+  const start=initTab||'name';
   const tabs=[['name','🏷️ 상품명'],['price','💵 가격 전략'],['detail','📄 상세페이지'],['sns','📸 인스타'],];
   showModal('🚀 발행 센터 · '+state.query, `
     <div class="tabnote" style="padding:0 0 10px;line-height:1.6">
       발굴한 상품을 <b>실제로 올리는 것</b>까지 잇는 곳입니다. 시장 실측값으로 초안을 만듭니다.
     </div>
     <div id="pubTabs" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">
-      ${tabs.map((x,i)=>`<button class="tab ${i===0?'on':''}" style="padding:6px 11px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer" onclick="pubTab('${x[0]}',this)">${x[1]}</button>`).join('')}
+      ${tabs.map(x=>`<button class="tab ${x[0]===start?'on':''}" style="padding:6px 11px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer" onclick="pubTab('${x[0]}',this)">${x[1]}</button>`).join('')}
       <button class="tab" style="padding:6px 11px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer" onclick="closeModal('pubOv');openPost()">✍️ 블로그 글</button>
     </div>
-    <div id="pubBody">${pubBodyHTML('name')}</div>`, 'pubOv', 'wide');
+    <div id="pubBody">${pubBodyHTML(start)}</div>`, 'pubOv', 'wide');
 }
 
 // 공통 모달(동적 생성)
@@ -2660,7 +2663,7 @@ function openPost(type){
       <button class="go" style="flex:1;min-width:120px;background:var(--purple)" onclick="copyText(window.__post.html)">🧩 HTML 복사</button>
       <button class="go" style="flex:1;min-width:120px;background:var(--green)" onclick="downloadPost()">📥 다운로드</button>
     </div>`;
-  showModal('✍️ 블로그 글 초안 · '+po.kw, body, 'postOv', 'wide');
+  showModal('✍️ 블로그 작성 · '+po.kw, body, 'postOv', 'wide');
   const m=document.querySelector('#postOv .modal-b'); if(m) m.scrollTop=0;
 }
 function copyText(t){ navigator.clipboard.writeText(t).then(()=>alert('복사했습니다 📋')).catch(()=>alert('복사 실패 — 다운로드를 이용하세요')); }
