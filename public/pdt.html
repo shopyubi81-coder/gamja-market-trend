@@ -1615,13 +1615,13 @@ function openMargin(){
     <div class="card-t" style="margin:6px 0 6px">매출</div>
     ${f('mgSell','판매가', price, '원','고객이 결제하는 금액(부가세 포함, 배송비 별도)')}
     <div class="card-t" style="margin:10px 0 6px">매입 원가</div>
-    ${f('mgCost','매입 단가', Math.round(price*0.4), '원','국내는 부가세 포함가, 수입은 현지 매입가')}
+    ${f('mgCost','매입 단가', '', '원','국내는 부가세 포함가, 수입은 현지 매입가 — 실제 사입가를 입력하세요')}
     <div id="mgImpBox" style="display:none">
       ${f('mgIntl','국제운송·통관비', 0, '원','개당으로 환산 — 항공/해상운임 + 통관수수료')}
       ${f('mgDuty','관세율', 0, '%','품목별로 다름 — 관세청 품목분류에서 확인')}
     </div>
     <div class="card-t" style="margin:10px 0 6px">물류·처리</div>
-    ${f('mgShip','내가 부담하는 배송비', 3000, '원','무료배송이면 실제 택배비, 유료면 0')}
+    ${f('mgShip','내가 부담하는 배송비', '', '원','무료배송이면 실제 택배비, 유료배송이면 0 — 실제 계약 운임을 입력하세요')}
     ${f('mgPack','포장비', 0, '원','박스·완충재·테이프·라벨 개당')}
     ${f('mgLabor','인건비', 0, '원','포장·출고에 드는 시간 × 시급을 개당으로')}
     ${f('mgStore','보관비', 0, '원','창고·3PL 비용을 개당으로')}
@@ -1693,6 +1693,13 @@ function calcMargin(){
   const el=document.getElementById('mgOut'); if(!el) return;
   const sell=g('mgSell');
   if(sell<=0){ el.innerHTML='<div class="tabnote">판매가를 입력하세요.</div>'; return; }
+  // 매입 단가는 임의로 채우지 않는다(예전엔 판매가×40%를 기본값으로 넣어뒀는데,
+  // 실제 원가와 다르면 마진율이 거짓으로 좋거나 나쁘게 나와 발주 판단을 그르친다)
+  const costRaw=(document.getElementById('mgCost')||{}).value;
+  if(!costRaw){
+    el.innerHTML='<div class="tabnote" style="line-height:1.6"><b>매입 단가를 입력하세요.</b> 임의 추정값을 넣지 않습니다 — 실제 사입가와 다르면 마진율이 거짓으로 좋거나 나쁘게 나와 발주 판단을 그르칠 수 있습니다.</div>';
+    return;
+  }
   const p={ cost:g('mgCost'), intl:g('mgIntl'), duty:g('mgDuty')/100,
             ship:g('mgShip'), pack:g('mgPack'), labor:g('mgLabor'), store:g('mgStore'),
             fee:g('mgFee')/100, pay:g('mgPay')/100, ad:g('mgAd')/100,
@@ -1788,7 +1795,7 @@ function openMyProducts(){
         ${inp('myKw','검색 키워드 (예: 캠핑 의자)','','190px')}
         ${inp('myPrice','내 판매가','','110px')}
         ${inp('myCost','매입 원가','','110px')}
-        ${inp('myShip','배송비','3000','90px')}
+        ${inp('myShip','배송비(실제값)','','90px')}
         ${inp('myFee','수수료%','','80px')}
         ${inp('myPay','결제%','','80px')}
         ${inp('myAd','광고%','','80px')}
@@ -1942,7 +1949,9 @@ function openOrder(){
   const m=myLoad().find(x=>x.kw===kw)||{};
   const p=state.products[state.selected]||{};
   const price=m.price||p.price||state.med||0;
-  const cost=m.cost||Math.round(price*0.4);
+  // 원가를 임의 비율로 지어내지 않는다. 🏪 내 상품에 등록된 값이 있으면 쓰고,
+  // 없으면 0으로 둬서 calcOrder()의 미입력 안내가 뜨게 한다.
+  const cost=m.cost||0;
   // 계절 상품이면 피크까지 남은 주수를 판매 기간의 근거로 쓴 수 있다
   const s=seasonCacheGet(kw);
   const wks=s?weeksToPeak(s.peak):0;
@@ -1961,7 +1970,7 @@ function openOrder(){
       ${s&&s.amp>=1.6?`<br>💡 이 상품은 계절성이 있습니다(피크 ${s.peak}월, ${wks}주 남음). 판매 기간을 그에 맞춰 잡았습니다.`:''}
     </div>
     ${f('odPrice','판매가',price,'원')}
-    ${f('odCost','매입 원가',cost,'원','부자재·포장 포함')}
+    ${f('odCost','매입 원가',cost||'','원','부자재·포장 포함 — 🏪 내 상품에 등록하면 자동으로 채워집니다')}
     ${f('odRate','예상 월 판매량',0,'개','모르면 아주 작게 잡고 시작하세요')}
     ${f('odWeeks','판매 기간',defWeeks,'주','시즌 상품이면 피크가 끝나는 시점까지')}
     ${f('odLead','발주 리드타임',3,'주','발주 후 입고까지')}
