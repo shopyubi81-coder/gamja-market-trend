@@ -58,16 +58,15 @@
     font-size:9px; display:flex; align-items:center; justify-content:center; }
 
   /* ===== 그리드 ===== */
+  /* ④(리뷰/키워드)를 ②상품분석 하단으로 합치고, ⑤액션을 ③AI리포트 아래 세로로
+     쌓으면서 행이 하나로 줄었다(예전엔 2번째 행에 review+action이 가로로 있었음) */
   .grid{ display:grid; gap:8px; align-items:stretch;
     grid-template-columns:206px 290px minmax(360px,1fr) 300px;
-    grid-template-areas:
-      "rail explore center ai"
-      "rail review  review action"; }
-  /* ③ AI(row1) 아래 ⑤ 액션(row2)이 붙도록 같은 col4. ①②③는 row1에서 동일 높이로 stretch */
-  .col-ai{ align-self:stretch; } .col-action{ align-self:start; }
+    grid-template-areas: "rail explore center ai"; }
   .col-rail{ grid-area:rail; } .col-explore{ grid-area:explore; }
-  .col-center{ grid-area:center; } .col-ai{ grid-area:ai; }
-  .col-action{ grid-area:action; } .col-review{ grid-area:review; }
+  .col-center{ grid-area:center; }
+  /* ③+⑤를 담는 래퍼만 grid-area를 가진다(그리드 항목은 래퍼 하나) */
+  .col-ai-stack{ grid-area:ai; display:flex; flex-direction:column; gap:8px; }
 
   .card{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); }
   .card-h{ padding:9px 12px; border-bottom:1px solid var(--line2); display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -247,24 +246,21 @@
   .demo-note b{ color:var(--primary); }
 
   /* ===== 반응형: 창 크기에 자동 대응 ===== */
-  /* 중간 폭: 4열 → 3열(① 위 / ② 아래 · ③ 위 / ⑤ 아래 · ④ 전체폭) */
+  /* 중간 폭: 4열 → 3열(① 위 / ② 아래, ③+⑤ 래퍼가 오른쪽 열에서 두 행을 세로로 채움) */
   @media (max-width:1320px){
     .grid{ grid-template-columns:188px minmax(0,1fr) 284px;
       grid-template-areas:
         "rail explore ai"
-        "rail center  action"
-        "review review review"; }
+        "rail center  ai"; }
   }
   /* 좁은 폭: 레일을 가로 메뉴처럼, 본문은 2열 */
   @media (max-width:980px){
     .grid{ grid-template-columns:1fr 1fr;
       grid-template-areas:
         "rail rail"
-        "explore ai"
+        "explore explore"
         "center center"
-        "action action"
-        "review review"; }
-    .col-rail .pdt-col-body, .col-rail{ }
+        "ai ai"; }
   }
   /* 모바일: 전부 1열 적층 */
   @media (max-width:680px){
@@ -272,7 +268,7 @@
     .hd-search{ order:3; max-width:none; flex-basis:100%; }
     .hd-right{ gap:12px; }
     .grid{ grid-template-columns:1fr;
-      grid-template-areas:"rail" "explore" "center" "ai" "action" "review"; }
+      grid-template-areas:"rail" "explore" "center" "ai"; }
     .charts{ grid-template-columns:1fr 1fr; }
     .kpis{ grid-template-columns:1fr 1fr !important; }
     .r4{ grid-template-columns:1fr !important; }
@@ -401,47 +397,12 @@
         </div>
 
         <div id="tabBody"></div>
-      </div>
-    </section>
 
-    <!-- ③ AI 분석 리포트 -->
-    <section class="col-ai card">
-      <div class="card-h">
-        <span class="area-tag"><span class="cir">3</span> AI 분석 리포트 영역</span>
-      </div>
-      <div class="card-b" id="aiReport"></div>
-    </section>
-
-    <!-- ⑤ 액션 -->
-    <aside class="col-action card">
-      <div class="card-h">
-        <span class="area-tag"><span class="cir">5</span> 액션 영역</span>
-      </div>
-      <div class="card-b">
-        <div class="card-t" style="margin-bottom:10px">다음 액션</div>
-        <button class="act-btn primary" onclick="openPublish()"><span class="ai-ico">🚀</span> 발행 센터</button>
-        <button class="act-btn" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
-        <button class="act-btn" onclick="openOrder()"><span class="ai-ico">📦</span> 발주량 · 현금흐름</button>
-        <button class="act-btn" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
-        <button class="act-btn" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
-        <button class="act-btn" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
-        <button class="act-btn" onclick="addWatch()"><span class="ai-ico">🔔</span> 관심 상품 추가</button>
-        <button class="act-btn" onclick="openPlan()"><span class="ai-ico">📥</span> 리포트 다운로드</button>
-      </div>
-    </aside>
-
-    <!-- ④ 리뷰/키워드 분석 -->
-    <section class="col-review card">
-      <div class="card-h">
-        <span class="area-tag"><span class="cir">4</span> 리뷰/키워드 분석 영역 (하단)</span>
-        <button class="seln" onclick="openReview()">📝 리뷰 붙여넣고 분석</button>
-      </div>
-      <!-- 키워드+바를 한 줄로 합치고(예전엔 목록형 바+별도 워드클라우드로 두 번 차지),
-           리뷰가 없을 때 늘 비어 있던 '리뷰 감성 분석' 칸은 없앴다(공간 확보, Founder 요청).
-           실제 리뷰를 붙여넣은 뒤에는 감성 비율을 제목 옆 작은 배지로만 보여준다. -->
-      <!-- 가격대별 분포는 ②상품분석의 '가격 분석' 탭과 내용이 겹쳐 삭제(Founder 지적) -->
-      <div class="r4" style="grid-template-columns:1fr">
-        <div style="border-right:none">
+        <!-- 예전엔 별도 ④ 영역(하단)이었으나 ②상품분석영역과 다루는 대상이 같아
+             여기로 합쳤다(Founder 요청). '리뷰' 문구는 제목에서 뺐다 — 리뷰가 없을 땐
+             경쟁 상품명 기반 실데이터로 채워지고, 리뷰를 붙여넣으면 그 결과로 바뀐다
+             (붙여넣기 진입점은 아래 배지 안의 링크로 대체돼 별도 버튼이 필요 없다). -->
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
           <div class="card-t" id="revColTitle">키워드 분석 <span id="revCount" style="font-size:10.5px;font-weight:700"></span></div>
           <div class="rtoggle" id="revToggle" style="display:none"><button class="on" onclick="rtab(this,'pos')">긍정 키워드</button><button class="neg" onclick="rtab(this,'neg')">부정 키워드</button></div>
           <div id="rpos" style="max-height:180px;overflow-y:auto"></div>
@@ -449,6 +410,36 @@
         </div>
       </div>
     </section>
+
+    <!-- ③ AI 분석 리포트 + ⑤ 액션을 같은 열에 세로로 쌓는다(Founder 요청:
+         액션영역이 ④와 가로로 짝지어져 있던 걸 없애 전체 구성이 한눈에 보이게).
+         같은 grid-area를 공유하는 두 개의 직접 그리드 항목을 만들 수는 없어서
+         래퍼 하나로 감싸 그 래퍼에만 grid-area를 준다. -->
+    <div class="col-ai-stack">
+      <section class="col-ai card">
+        <div class="card-h">
+          <span class="area-tag"><span class="cir">3</span> AI 분석 리포트 영역</span>
+        </div>
+        <div class="card-b" id="aiReport"></div>
+      </section>
+
+      <aside class="col-action card">
+        <div class="card-h">
+          <span class="area-tag"><span class="cir">5</span> 액션 영역</span>
+        </div>
+        <div class="card-b">
+          <div class="card-t" style="margin-bottom:10px">다음 액션</div>
+          <button class="act-btn primary" onclick="openPublish()"><span class="ai-ico">🚀</span> 발행 센터</button>
+          <button class="act-btn" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
+          <button class="act-btn" onclick="openOrder()"><span class="ai-ico">📦</span> 발주량 · 현금흐름</button>
+          <button class="act-btn" onclick="openPost()"><span class="ai-ico">✍️</span> 블로그 글 초안</button>
+          <button class="act-btn" onclick="openPlan()"><span class="ai-ico">🎯</span> 상품 기획안 생성</button>
+          <button class="act-btn" onclick="searchSupplier()"><span class="ai-ico">📦</span> 공급처 검색</button>
+          <button class="act-btn" onclick="addWatch()"><span class="ai-ico">🔔</span> 관심 상품 추가</button>
+          <button class="act-btn" onclick="openPlan()"><span class="ai-ico">📥</span> 리포트 다운로드</button>
+        </div>
+      </aside>
+    </div>
   </div>
 
   <!-- ===== 플라이휠 Loop ===== -->
@@ -733,8 +724,9 @@ function setLive(s){
 // 문서 1394px vs 뷰포트 650px) 스크롤이 있다는 것 자체를 명확히 알려주는 이동 버튼.
 // 그냥 맨위/맨아래가 아니라 '①②③ 행 → ④⑤ 행 → 플라이휠 → 맨아래' 의미 단위로 이동한다.
 function jumpTo(dir){
+  // .col-review는 ②상품분석영역으로 합쳐지며 없어졌다 — ③+⑤ 래퍼를 대신 이정표로 쓴다
   const marks=[0,
-    (document.querySelector('.col-review')||{}).offsetTop||0,
+    (document.querySelector('.col-ai-stack')||{}).offsetTop||0,
     (document.querySelector('.fly')||{}).offsetTop||0,
     Math.max(0, document.documentElement.scrollHeight-window.innerHeight)
   ].filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b);   // 중복 제거(콘텐츠 짧으면 지점들이 겹칠 수 있음)
@@ -2110,8 +2102,9 @@ function regPanelHTML(){
   const head=`<div class="card-t" style="margin:2px 0 8px">⚖️ 규제·인증 체크</div>`;
   if(!r.hits.length){
     return head+`<div class="tabnote" style="line-height:1.6">
-      ${r.safe?'알려진 <b>특별 인증 요건이 확인되지 않는</b> 편입니다.':'해당하는 규제 항목을 찾지 못했습니다.'}
-      다만 <b>이 도구가 모든 규제를 담고 있지는 않습니다</b> — 소싱 전 반드시 직접 확인하세요.</div>`;
+      ${r.safe?'알려진 <b>특별 인증 요건이 확인되지 않는</b> 편입니다.':'해당하는 규제 항목을 찾지 못했습니다.'}</div>
+      <div style="margin-top:7px;padding:8px 10px;border-radius:8px;background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;font-size:11px;line-height:1.6">
+        ※ 법률 자문이 아닙니다. 이 도구가 모든 규제를 담고 있지는 않습니다 — 소싱 전 반드시 직접 확인하세요.</div>`;
   }
   const items=r.hits.map(h=>{
     const c=h.lv>=3?'var(--red)':h.lv===2?'var(--amber)':'var(--sub)';
@@ -2122,9 +2115,9 @@ function regPanelHTML(){
       <div style="font-size:11px;margin-top:4px"><a href="${h.url}" target="_blank" rel="noopener" style="color:var(--primary);font-weight:700">${h.org} 확인 →</a></div>
     </div>`;
   }).join('');
-  return head+items+`<div class="tabnote" style="padding:4px 0 0;line-height:1.6">
-    ※ <b>법률 자문이 아닙니다.</b> 확인해야 할 지점을 알려줄 뿐이며, 실제 요건·예외는 소관 기관에서 직접 확인하세요.
-    ${r.lv>=3?'<br>⚠️ <b>초기 셀러에게는 권하지 않는 영역</b>입니다 — 인증 비용과 기간이 상당합니다.':''}</div>`;
+  return head+items+`<div style="margin-top:4px;padding:8px 10px;border-radius:8px;background:#EFF6FF;border:1px solid #BFDBFE;color:#1D4ED8;font-size:11px;line-height:1.6">
+    ※ <b>법률 자문이 아닙니다.</b> 확인해야 할 지점을 알려줄 뿐이며, 실제 요건·예외는 소관 기관에서 직접 확인하세요.</div>
+    ${r.lv>=3?'<div class="tabnote" style="padding:6px 0 0">⚠️ <b>초기 셀러에게는 권하지 않는 영역</b>입니다 — 인증 비용과 기간이 상당합니다.</div>':''}`;
 }
 
 // ===================== 🚀 발행 센터 =====================
