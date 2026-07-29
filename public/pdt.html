@@ -333,11 +333,11 @@
       <div class="rail-sec">
         <div class="rail-lbl">탐색</div>
         <div class="rail-item disc" onclick="navMenu(this,'today')" style="background:var(--primary);color:#fff;border-color:var(--primary)"><span class="ic">🏠</span> 오늘의 할 일 <span class="pill" style="font-size:8px;margin-left:auto;background:rgba(255,255,255,.25);color:#fff">START</span></div>
+        <div class="rail-item disc" onclick="navMenu(this,'discover')"><span class="ic">🎯</span> 오늘의 발굴 <span class="pill g" style="font-size:8px;margin-left:auto">AUTO</span></div>
         <div class="rail-item disc" onclick="navMenu(this,'sourcing')"><span class="ic">📅</span> 소싱 타이밍 <span class="pill g" style="font-size:8px;margin-left:auto">선행</span></div>
         <div class="rail-item disc" onclick="navMenu(this,'events')"><span class="ic">🗓️</span> 이벤트 캘린더 <span class="pill g" style="font-size:8px;margin-left:auto">D-</span></div>
         <div class="rail-item disc" onclick="navMenu(this,'mine')"><span class="ic">🏪</span> 내 상품 · 가격 대응</div>
-        <div class="rail-item disc" onclick="navMenu(this,'discover')"><span class="ic">🎯</span> 오늘의 발굴 <span class="pill g" style="font-size:8px;margin-left:auto">AUTO</span></div>
-        <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색</div>
+        <div class="rail-item on" onclick="navMenu(this,'search')"><span class="ic">🔍</span> 키워드 검색 <span style="font-size:9.5px;color:var(--naver);font-weight:800;margin-left:auto">네이버</span></div>
         <div class="rail-item" onclick="navMenu(this,'category')"><span class="ic">📈</span> 분야 분석·트렌드</div>
         <div class="rail-item" onclick="navMenu(this,'watch')"><span class="ic">⭐</span> 관심 키워드 <span id="watchCnt" class="pill b" style="font-size:8px;margin-left:auto">0</span></div>
         <div class="rail-item" onclick="navMenu(this,'compare')"><span class="ic">📊</span> 비교 분석</div>
@@ -927,15 +927,6 @@ function renderAIReport(){
     `<b>${state.trendCat||'카테고리'}</b> 기준 ${trendTxt}, 네이버 매물 <b>${state.total!=null?fmtK(state.total):'-'}</b>개로 경쟁은 <b>${cl}</b>, 시장 규모 <b>${sz}</b>. `+
     `가격대 중앙값 <b>${won(med)}</b>, 종합 기회점수 <b>${p.score??'-'}점</b>.`+
     (sp?`<br/>· 선택 상품 <b>${won(sp)}</b>${med?` (중앙값 대비 ${posPct>0?'+':''}${posPct}%, ${posTxt})`:''}`:'');
-  // 인기/불만 — 리뷰 분석(④) 있을 때만 실데이터
-  let pop, neg;
-  if(state.review && !state.review.demo){
-    const li=(arr,col)=>arr.slice(0,3).map((k,i)=>`<li><span class="n">${i+1}</span> ${k[0]} <b style="margin-left:auto;color:${col}">${k[1]}건</b></li>`).join('');
-    pop=li(state.review.pos,'var(--green)')||'<li class="ai-muted">긍정 키워드 부족</li>';
-    neg=li(state.review.neg,'var(--red)')||'<li class="ai-muted">불만 키워드 부족</li>';
-  } else {
-    pop=neg=`<li style="background:#FAFBFC;color:var(--sub)">④ 📝 리뷰 분석 시 표시</li>`;
-  }
   // 추천 전략(신호 기반)
   const acts=[];
   if(state.total>200000) acts.push('경쟁 과열 — 틈새 사양·가격대로 차별화');
@@ -960,8 +951,6 @@ function renderAIReport(){
   el.innerHTML=`
     <div class="card-t" style="margin-bottom:10px">🤖 AI 분석 리포트 ${liveTag}</div>
     <div class="ai-summary">${summary}</div>
-    <div class="ai-h">🔥 인기 요인 TOP 3</div><ul class="ai-list pos">${pop}</ul>
-    <div class="ai-h">⚠️ 주요 불만 요인 TOP 3</div><ul class="ai-list neg">${neg}</ul>
     <div class="ai-h">✅ 추천 전략</div><ul class="ai-list act">${actHtml}</ul>
     <div class="gauge">
       <div class="gl">종합 기회 점수</div>
