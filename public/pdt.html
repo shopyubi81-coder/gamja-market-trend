@@ -315,7 +315,7 @@
       </div>
     </div>
     <div class="hd-search">
-      <input id="q" type="text" value="캠핑 선풍기" placeholder="상품·키워드 검색 후 Enter" onkeydown="if(event.key==='Enter')doSearch()" />
+      <input id="q" type="text" value="" placeholder="상품·키워드 검색 후 Enter" onkeydown="if(event.key==='Enter')doSearch()" />
       <button class="sbtn" onclick="doSearch()">🔍</button>
     </div>
     <div class="hd-right">
@@ -386,7 +386,7 @@
       </div>
       <div class="card-b">
         <div class="titlerow" style="margin-bottom:14px">
-          <span class="tt" id="ptitle">캠핑 선풍기</span>
+          <span class="tt" id="ptitle">검색 결과가 여기에 표시됩니다</span>
           <span class="pill b" style="cursor:pointer" onclick="addWatch()">⭐ 관심 추가</span>
           <span class="pill a" id="liveBadge">⚙️ 데모</span>
           <span class="pill b" style="cursor:pointer;margin-left:auto" onclick="loadCoupangCheck()" title="쿠팡에서 같은 키워드로 조회(6분에 한 번)">🔵 쿠팡 교차검증</span>
@@ -489,7 +489,11 @@ const DEMO_SEED = [
   {name:'휴대용 선풍기',rating:'4.5',reviews:4321,price:21000,growth:18,score:65},
   {name:'접이식 캠핑 선풍기',rating:'4.4',reviews:3210,price:15000,growth:15,score:58},
 ];
-const state = { query:'캠핑 선풍기', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false, period:'monthly', discScope:'top' };
+// ⚠️ 예전엔 '캠핑 선풍기'가 기본값이라 페이지를 열면 사용자가 아무것도 안 해도
+// 자동으로 이 키워드가 검색됐다. 발행 센터·블로그·인스타를 그 직후에 열면
+// 방금 검색한 게 아니라 이 자동검색 결과 기준으로 콘텐츠가 만들어져 혼란을 줬다
+// (Founder 지적) — 검색 전에는 아무것도 채우지 않는다.
+const state = { query:'', live:false, total:270000, products:[], selected:0, trend:null, trendCat:null, catData:null, med:0, showAll:false, tab:'trend', kwCache:{}, trendKw:false, period:'monthly', discScope:'top' };
 const PLIST_MIN = 6;   // ① 기본 표시 개수(나머지는 '더 보기')
 
 // 검색어 → DataLab 7대 카테고리 매핑(카테고리 트렌드 실데이터 연결용)
@@ -699,12 +703,29 @@ function setLive(s){
   const b=document.getElementById('liveBadge'); if(b){
     if(s==='ok'){ b.className='pill g'; b.textContent='🟢 네이버 실시간'; }
     else if(s==='loading'){ b.className='pill a'; b.textContent='⏳ 불러오는 중'; }
+    else if(s==='idle'){ b.className='pill b'; b.textContent='🔍 검색 대기'; }
     else { b.className='pill a'; b.textContent='⚙️ 데모'; }
   }
   const note=document.getElementById('demoNote');
   if(note){ note.innerHTML = s==='ok'
     ? `🟢 <b>네이버 쇼핑 실시간</b> 연결됨 · 상품·가격·매물수·트렌드 전부 실데이터. <b>평점·리뷰수·판매량은 네이버 API가 제공하지 않아 표시하지 않습니다</b>`
-    : `⚙️ <b>데모 데이터</b>로 표시 중 (네이버 연결 안 됨) — config.js의 Supabase 설정을 확인하세요`; }
+    : s==='idle'
+      ? `🔍 <b>네이버 연결됨</b> — 검색창에 상품을 입력하거나 왼쪽 🎯오늘의 발굴·📅소싱 타이밍에서 후보를 골라 분석을 시작하세요.`
+      : `⚙️ <b>데모 데이터</b>로 표시 중 (네이버 연결 안 됨) — config.js의 Supabase 설정을 확인하세요`; }
+}
+// 검색 전 초기 화면 — 예전엔 자동으로 '캠핑 선풍기'를 검색해 채웠지만,
+// 지금은 아무 상품도 선택되지 않았다는 걸 정직하게 보여준다
+function renderEmptyState(){
+  const note=document.getElementById('plistNote'); if(note) note.innerHTML='';
+  const plist=document.getElementById('plist');
+  if(plist) plist.innerHTML=`<div style="padding:26px 12px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.7">
+    🔍 상단 검색창에 상품·키워드를 입력해 주세요.<br>왼쪽 🎯오늘의 발굴 · 📅소싱 타이밍에서 후보를 골라 바로 분석할 수도 있습니다.</div>`;
+  const t=document.getElementById('ptitle'); if(t) t.textContent='검색 결과가 여기에 표시됩니다';
+  const kpis=document.getElementById('kpis'); if(kpis) kpis.innerHTML='';
+  const tb=document.getElementById('tabBody'); if(tb) tb.innerHTML=tabnote('먼저 상품을 검색하면 트렌드·가격·경쟁 분석이 표시됩니다.');
+  const ai=document.getElementById('aiReport'); if(ai) ai.innerHTML=tabnote('먼저 상품을 검색하면 AI 분석 리포트가 표시됩니다.');
+  const rp=document.getElementById('rpos'); if(rp) rp.innerHTML='';
+  const nv=document.getElementById('mainNav'); if(nv) nv.innerHTML='';
 }
 
 // ── 렌더
@@ -1048,6 +1069,7 @@ function getWatch(){ try{ return JSON.parse(localStorage.getItem('pdt_watch')||'
 function setWatch(a){ localStorage.setItem('pdt_watch', JSON.stringify(a)); updateWatchCnt(); }
 function updateWatchCnt(){ const el=document.getElementById('watchCnt'); if(el) el.textContent=getWatch().length; }
 function addWatch(){
+  if(!requireProduct()) return;
   const p=state.products[state.selected]; const name=p?p.name:state.query;
   const w=getWatch(); if(w.find(x=>x.name===name)){ alert('이미 관심 목록에 있습니다'); return; }
   w.unshift({ name, price:p?p.price:0, query:state.query, score:p?p.score:0, ts:Date.now() });
@@ -2288,8 +2310,14 @@ ${allTags}`,
   }
   return '';
 }
+// 검색 전(state.products가 비어있음)에 액션 버튼을 누르면 빈 키워드로 콘텐츠가
+// 만들어지는 걸 막는다. 자동검색을 없앤 뒤로 이 상태가 실제로 발생할 수 있어졌다.
+function requireProduct(){
+  if(!state.query || !state.products.length){ alert('먼저 상품을 검색하세요 🔍'); return false; }
+  return true;
+}
 function openPublish(){
-  if(!state.products.length){ alert('먼저 상품을 검색하세요'); return; }
+  if(!requireProduct()) return;
   const tabs=[['name','🏷️ 상품명'],['price','💵 가격 전략'],['detail','📄 상세페이지'],['sns','📸 인스타'],];
   showModal('🚀 발행 센터 · '+state.query, `
     <div class="tabnote" style="padding:0 0 10px;line-height:1.6">
@@ -2364,6 +2392,7 @@ ${top}
   return { name, text, html };
 }
 function openPlan(){
+  if(!requireProduct()) return;
   const pl=buildPlan(); window.__plan=pl;
   const body=pl.html+`<div style="display:flex;gap:8px;margin-top:14px">
       <button class="go" style="flex:1" onclick="copyPlan()">📋 복사</button>
@@ -2606,6 +2635,7 @@ function mkHtml(text){
     .replace(/\n/g,'<br>');
 }
 function openPost(type){
+  if(!requireProduct()) return;
   const T=type||'price';
   const po=buildPost(T); window.__post=po;
   const ang=catAngle();
@@ -2706,6 +2736,7 @@ function cpxRenderResults(j, kw){
 }
 
 function searchSupplier(){
+  if(!requireProduct()) return;
   const p=state.products[state.selected]; const q=encodeURIComponent((p?p.name:state.query)+' 도매 공급처');
   window.open('https://search.naver.com/search.naver?query='+q,'_blank','noopener');
 }
@@ -2893,13 +2924,14 @@ document.getElementById('fly').innerHTML=FLY.map((s,i)=>`
 // ── 초기화: 네이버 상태 확인 후 기본 검색어로 실데이터 로드(실패 시 데모)
 (async function init(){
   updateWatchCnt();
-  loadDemo(); paint();                         // 우선 데모로 즉시 그림
+  renderRailCats();
+  renderEmptyState();                          // 검색 전 — 자동으로 아무 키워드도 채우지 않는다
   if(!cfgOK){ setLive('demo'); return; }
   try{
     const r=await afetch('/api/status'); const j=await r.json();
     if(!j || !j.naverConfigured){ setLive('demo'); return; }
   }catch(e){ setLive('demo'); return; }
-  doSearch();                                  // 네이버 연결됨 → 기본어 실데이터
+  setLive('idle');                             // 연결은 됐지만 아직 검색 전
 })();
 </script>
 </body>
