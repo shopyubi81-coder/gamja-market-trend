@@ -472,6 +472,16 @@
   <div class="demo-note" id="demoNote">네이버 연결 상태를 확인하는 중…</div>
 </div>
 
+<!-- 화면이 뷰포트보다 길어 스크롤이 필요할 때, 스크롤이 있다는 것 자체를 명확히 알려주는
+     빠른 이동 버튼. 위/아래 각각 다음으로 넘어갈 '의미 있는 지점'으로 이동한다
+     (그냥 맨위/맨아래가 아니라 ①②③행 → ④⑤행 → 맨아래 순으로). -->
+<div id="jumpNav" style="position:fixed; right:18px; bottom:22px; z-index:40; display:flex; flex-direction:column; gap:6px;">
+  <button onclick="jumpTo(-1)" title="위 영역으로" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
+    background:#fff;box-shadow:var(--shadow);cursor:pointer;font-size:15px;color:var(--sub)">▲</button>
+  <button onclick="jumpTo(1)" title="아래 영역으로" style="width:38px;height:38px;border-radius:50%;border:1px solid var(--line);
+    background:#fff;box-shadow:var(--shadow);cursor:pointer;font-size:15px;color:var(--sub)">▼</button>
+</div>
+
 <!-- 리뷰 분석 모달 -->
 <div class="ov" id="revOv">
   <div class="modal">
@@ -729,6 +739,22 @@ function setLive(s){
 }
 
 // ── 렌더
+// 화면이 뷰포트보다 길 때(흔한 노트북 해상도에서 실측 확인됨 — 1366×650 기준
+// 문서 1394px vs 뷰포트 650px) 스크롤이 있다는 것 자체를 명확히 알려주는 이동 버튼.
+// 그냥 맨위/맨아래가 아니라 '①②③ 행 → ④⑤ 행 → 플라이휠 → 맨아래' 의미 단위로 이동한다.
+function jumpTo(dir){
+  const marks=[0,
+    (document.querySelector('.col-review')||{}).offsetTop||0,
+    (document.querySelector('.fly')||{}).offsetTop||0,
+    Math.max(0, document.documentElement.scrollHeight-window.innerHeight)
+  ].filter((v,i,a)=>a.indexOf(v)===i).sort((a,b)=>a-b);   // 중복 제거(콘텐츠 짧으면 지점들이 겹칠 수 있음)
+  const cur=window.scrollY;
+  let target;
+  if(dir>0){ target=marks.find(m=>m>cur+10); if(target===undefined) target=marks[marks.length-1]; }
+  else{ const below=marks.filter(m=>m<cur-10); target=below.length?below[below.length-1]:marks[0]; }
+  window.scrollTo({top:target, behavior:'smooth'});
+}
+
 function paint(){ renderProducts(); renderRank(); renderKpis(); renderTitle(); renderTabBody(); renderPriceDist(); renderReview(); renderAIReport(); renderRailCats();
   const nv=document.getElementById('mainNav'); if(nv) nv.innerHTML=mainStepNav(); }
 
