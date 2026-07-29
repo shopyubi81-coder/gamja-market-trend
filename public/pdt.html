@@ -407,14 +407,11 @@
         <div id="tabBody"></div>
 
         <!-- 예전엔 별도 ④ 영역(하단)이었으나 ②상품분석영역과 다루는 대상이 같아
-             여기로 합쳤다(Founder 요청). '리뷰' 문구는 제목에서 뺐다 — 리뷰가 없을 땐
-             경쟁 상품명 기반 실데이터로 채워지고, 리뷰를 붙여넣으면 그 결과로 바뀐다
-             (붙여넣기 진입점은 아래 배지 안의 링크로 대체돼 별도 버튼이 필요 없다). -->
+             여기로 합쳤다(Founder 요청). 리뷰 붙여넣기 기능은 실제로 쓰지 않아
+             제거했고(Founder 확인), 항상 네이버 검색 상품명 기반 실데이터만 보여준다. -->
         <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
           <div class="card-t" id="revColTitle">키워드 분석 <span id="revCount" style="font-size:10.5px;font-weight:700"></span></div>
-          <div class="rtoggle" id="revToggle" style="display:none"><button class="on" onclick="rtab(this,'pos')">긍정 키워드</button><button class="neg" onclick="rtab(this,'neg')">부정 키워드</button></div>
           <div id="rpos" style="max-height:180px;overflow-y:auto"></div>
-          <div id="rneg" style="display:none;max-height:180px;overflow-y:auto"></div>
         </div>
       </div>
     </section>
@@ -436,7 +433,7 @@
        옆 열들과 균형이 안 맞았음) -->
   <section class="card act-bar">
     <div class="card-b" style="display:flex;flex-wrap:wrap;align-items:center;gap:9px">
-      <span class="area-tag" style="flex:0 0 auto"><span class="cir">5</span> 액션 영역</span>
+      <span class="area-tag" style="flex:0 0 auto"><span class="cir">4</span> 액션 영역</span>
       <button class="act-btn-h primary" onclick="openPublish()"><span class="ai-ico">🚀</span> 발행 센터</button>
       <button class="act-btn-h" onclick="openMargin()"><span class="ai-ico">💰</span> 마진 계산</button>
       <button class="act-btn-h" onclick="openOrder()"><span class="ai-ico">📦</span> 발주량 · 현금흐름</button>
@@ -469,21 +466,6 @@
     background:#fff;box-shadow:var(--shadow);cursor:pointer;font-size:15px;color:var(--sub)">▼</button>
 </div>
 
-<!-- 리뷰 분석 모달 -->
-<div class="ov" id="revOv">
-  <div class="modal">
-    <div class="modal-h"><b>📝 리뷰 분석 (무료·LLM 미사용)</b><button class="modal-x" onclick="closeReview()">✕</button></div>
-    <div class="modal-b">
-      <label>상품명</label>
-      <input id="revProduct" type="text" placeholder="예: 캠핑 선풍기" />
-      <button class="seln" style="width:100%;text-align:center;margin:-4px 0 12px;padding:9px;border-color:var(--naver);color:#0a8a3f;font-weight:700" onclick="openNaverForReview()">🔗 네이버에서 이 상품 리뷰 페이지 열기 (새 탭)</button>
-      <label>리뷰 붙여넣기 (한 줄에 하나씩)</label>
-      <textarea id="revInput" placeholder="네이버·쿠팡 등에서 실제 리뷰를 복사해 붙여넣으세요. 한 줄에 한 리뷰.&#10;예) 저소음이라 좋아요&#10;배터리가 오래가서 만족&#10;무게가 좀 무거워요"></textarea>
-      <div class="hint">긍/부정 사전 + 단어 빈도로 분석합니다. 텍스트는 브라우저에서만 처리되고 전송되지 않습니다.</div>
-      <button class="go" onclick="runReview()">분석하기 →</button>
-    </div>
-  </div>
-</div>
 
 <script src="config.js"></script>
 <script>
@@ -942,7 +924,6 @@ function renderAIReport(){
   if(posTxt==='고가 포지션(프리미엄)') acts.push('이 상품 고가대 — 프리미엄 사양·브랜딩으로 차별화');
   else if(posTxt==='저가 포지션(가성비)') acts.push('이 상품 저가대 — 가성비/물량 소구, 마진 관리 주의');
   else if(posTxt) acts.push('이 상품 중간가 — 표준 사양 경쟁, 리뷰로 차별화');
-  if(state.review && !state.review.demo && state.review.neg[0]) acts.push(`최대 불만 '${state.review.neg[0][0]}' 개선형 기획`);
   if(!acts.length) acts.push('신호가 더 모이면 전략을 제시합니다');
   const actHtml=acts.slice(0,5).map(a=>`<li><span class="ck">✓</span> ${a}</li>`).join('');
   // 게이지 — 종합 기회점수(성공확률 아님)
@@ -2348,8 +2329,7 @@ function buildPlan(){
   const bk=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
   const cnt=bk.map(b=>prices.filter(x=>x>=b[1]&&x<b[2]).length);
   const gap = prices.length? bk[cnt.indexOf(Math.min(...cnt))][0] : '-';
-  const hasRev=state.review&&!state.review.demo;
-  const diff = hasRev&&state.review.neg[0] ? `리뷰 최대 불만 '${state.review.neg[0][0]}' 개선형` : '경쟁 대비 사양·가격 차별화 (리뷰 분석 시 정밀화)';
+  const diff = '경쟁 대비 사양·가격 차별화';
   const dv = med?Math.round((p.price-med)/med*100):0;
   const top=state.products.slice(0,5).map((x,i)=>`  ${i+1}. ${x.name}  ·  ${won(x.price)}  ·  점수 ${x.score}`).join('\n');
   const date=new Date().toLocaleDateString('ko-KR');
@@ -2369,7 +2349,7 @@ function buildPlan(){
 [3] 기획 방향
 - 권장 가격대: ${gap} 구간(매물 적은 빈틈) 또는 중앙값 ${won(med)} 근처
 - 차별화 포인트: ${diff}
-- 타깃: 해당 분야 관심 고객 ${hasRev?'(리뷰 기반 니즈 반영)':'(리뷰 수집 후 정밀화)'}
+- 타깃: 해당 분야 관심 고객
 - 상품명 후보: ${name} 프리미엄 / ${name} 실속형 / ${name} 2026
 
 [4] 경쟁 상품 TOP5
@@ -2840,21 +2820,7 @@ function setAxisDays(id, pts){
   el.innerHTML=pts.map(p=>{ const d=p.period||''; return `<span>${d.length>=10?(+d.slice(5,7))+'/'+(+d.slice(8,10)):''}</span>`; }).join('');
 }
 
-// ===================== ④ 리뷰/키워드 분석 (P2 · 무료·LLM 미사용) =====================
-const REV_POS = ['좋','만족','최고','가성비','저렴','싸','빠르','튼튼','편하','편리','부드','조용','가벼','예쁘','이쁘','깔끔','우수','추천','괜찮','강추','굿','훌륭','선명','넉넉','시원','마음에','대박','완벽','감동','짱','신세계','재구매'];
-const REV_NEG = ['별로','불만','아쉽','무겁','느리','약하','고장','불편','시끄','비싸','떨어','부족','최악','실망','안좋','깨','흠집','후회','짧','불량','냄새','늦','안되','문제','하자','불안','거슬','버벅','끊','환불','반품'];
-const REV_STOP = new Set(['그리고','근데','그런데','하지만','그냥','정말','너무','조금','약간','진짜','완전','계속','아주','매우','다시','이거','저거','그거','제품','상품','구매','구입','사용','배송','후기','리뷰','정도','생각','때문','이런','저런','부분','사진','이번','처음','이제','거의','및','등','중','구성','하나','사람','경우','우리']);
-const REV_LABEL = {좋:'좋음',만족:'만족',최고:'최고',가성비:'가성비',저렴:'저렴',싸:'저렴',빠르:'빠름',튼튼:'튼튼함',편하:'편함',편리:'편리',부드:'부드러움',조용:'조용함',가벼:'가벼움',예쁘:'예쁨',이쁘:'예쁨',깔끔:'깔끔함',추천:'추천',괜찮:'괜찮음',강추:'강력추천',선명:'선명함',넉넉:'넉넉함',시원:'시원함',완벽:'완벽함',감동:'감동',재구매:'재구매의사',별로:'별로',불만:'불만',아쉽:'아쉬움',무겁:'무거움',느리:'느림',약하:'약함',고장:'고장',불편:'불편',시끄:'시끄러움',비싸:'비쌈',떨어:'품질저하',부족:'부족함',최악:'최악',실망:'실망',깨:'파손',흠집:'흠집',후회:'후회',짧:'짧음',불량:'불량',냄새:'냄새',늦:'늦음',문제:'문제',하자:'하자',끊:'끊김',환불:'환불',반품:'반품'};
-function revTokenize(text){
-  return text.split(/[\s,.!?~"'()\[\]·…\/\-\n]+/)
-    .map(w=>w.replace(/(이|가|을|를|은|는|에|의|도|만|와|과|로|으로|에서|까지|부터|에게|네요|어요|아요|습니다|했어요|해요|예요|이에요)$/,''))
-    .map(w=>w.replace(/[^가-힣a-zA-Z0-9]/g,''))
-    .filter(w=>w.length>=2 && !REV_STOP.has(w));
-}
-
-// 데모 리뷰(분석 전 기본 표시)
-function curReview(){ return state.review || null; }
-
+// ===================== ④ 키워드 분석 (②상품분석영역 하단에 통합됨) =====================
 function barRow(label, num, max, color){
   const w=Math.max(6, Math.round(num/max*100));
   return `<div class="bar"><div class="bt"><b>${label}</b><span>${num}</span></div><div class="btrack"><div class="bfill" style="width:${w}%;background:${color}"></div></div></div>`;
@@ -2880,27 +2846,17 @@ function kwCloud(items, color){
 // 키워드는 대체할 실데이터가 있다 — 지금 검색 결과 상품명에서 뽑은 진짜 빈출 단어(titleTokens).
 // 감성(긍/부정 비율)은 대체할 실데이터가 없으므로 붙여넣기 전까지 정직하게 빈 상태로 둔다.
 // (리뷰 감성 도넛 칸은 공간 확보를 위해 삭제 — 실제 리뷰가 있을 땐 제목 옆 작은 배지로만 표시)
+// 리뷰 붙여넣기 기능은 실제로 쓰지 않아 제거했다(Founder 확인) — 항상
+// 경쟁 상품명 기반(네이버 검색 결과) 실데이터만 보여준다. 이 상품 목록 자체가
+// doSearch()의 /api/naver/search 결과이므로 항상 네이버 기준이고 쿠팡은
+// 여기 쓰이지 않는다 — 출처가 헷갈리지 않도록 배지에 명시한다.
 function renderReview(){
   // ⚠️ titleEl.innerHTML을 나중에 덮어쓰면 그 안의 #revCount 배지가 통째로 사라진다
   // (innerHTML 재대입은 자식 노드를 새로 만들어 방금 넣은 내용을 지워버림) —
   // 그래서 배지 텍스트를 titleEl 문자열 안에 한 번에 같이 넣는다.
-  const rv=curReview();
   const titleEl=document.getElementById('revColTitle');
-  const toggle=document.getElementById('revToggle');
-
-  if(rv){
-    const sentBadge=` · 😊${rv.posPct}% 😐${rv.neuPct}% 😞${rv.negPct}%`;
-    if(titleEl) titleEl.innerHTML=`리뷰 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건${sentBadge}</span>`;
-    if(toggle) toggle.style.display='flex';
-    const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=kwCloud(rv.pos,'var(--green)');
-    const rn=document.getElementById('rneg'); if(rn) rn.innerHTML=kwCloud(rv.neg,'var(--red)');
-    return;
-  }
-
-  // 리뷰 없음 — 경쟁 상품명 기반 실데이터로 키워드 칸만 채운다
   const toks=(typeof titleTokens==='function') ? titleTokens() : [];
-  if(titleEl) titleEl.innerHTML=`경쟁 상품명 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">실측</span> 경쟁 상품명 ${state.products.length}개 기반 · <a href="#" onclick="openReview();return false" style="color:var(--primary);font-weight:700">📝 리뷰 붙여넣기</a></span>`;
-  if(toggle) toggle.style.display='none';
+  if(titleEl) titleEl.innerHTML=`경쟁 상품명 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">네이버 기반</span> 경쟁 상품명 ${state.products.length}개</span>`;
   const rp=document.getElementById('rpos');
   if(rp) rp.innerHTML=kwCloud(toks);
 }
@@ -2918,39 +2874,6 @@ function drawDonut(pos,neu,neg){
 
 // 가격대별 분포 — 실상품 가격(실데이터)로 집계
 
-// 모달 + 실제 분석
-function openReview(){ const p=state.products[state.selected]; document.getElementById('revProduct').value=p?p.name:state.query; document.getElementById('revOv').classList.add('on'); }
-function openNaverForReview(){
-  const p=state.products[state.selected];
-  const url=(p&&p.link) ? p.link
-    : 'https://search.shopping.naver.com/search/all?query='+encodeURIComponent((document.getElementById('revProduct').value||state.query));
-  window.open(url,'_blank','noopener');
-}
-function closeReview(){ document.getElementById('revOv').classList.remove('on'); }
-function runReview(){
-  const raw=(document.getElementById('revInput').value||'').trim();
-  if(!raw){ alert('리뷰를 먼저 붙여넣어 주세요.'); return; }
-  let reviews=raw.split(/\n+/).map(s=>s.trim()).filter(Boolean);
-  if(reviews.length<2) reviews=raw.split(/[.!?]\s+/).map(s=>s.trim()).filter(Boolean);
-  const has=(t,arr)=>arr.filter(st=>t.includes(st));
-  let pos=0,neg=0; const pf={},nf={},wf={};
-  reviews.forEach(r=>{ const ph=has(r,REV_POS),nh=has(r,REV_NEG);
-    ph.forEach(s=>pf[s]=(pf[s]||0)+1); nh.forEach(s=>nf[s]=(nf[s]||0)+1);
-    if(ph.length>nh.length)pos++; else if(nh.length>ph.length)neg++;
-    revTokenize(r).forEach(w=>wf[w]=(wf[w]||0)+1); });
-  const top=(o,n)=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,n);
-  const total=reviews.length;
-  const posPct=Math.round(pos/total*100), negPct=Math.round(neg/total*100), neuPct=Math.max(0,100-posPct-negPct);
-  state.review={ demo:false, total, posPct, neuPct, negPct,
-    pos:top(pf,6).map(([k,v])=>[REV_LABEL[k]||k,v]),
-    neg:top(nf,6).map(([k,v])=>[REV_LABEL[k]||k,v]),
-    cloud:top(wf,10).map(([w,c])=>[w,c]),
-    product:(document.getElementById('revProduct').value||'').trim() };
-  closeReview(); renderReview();
-  // ③ AI 리포트 인기/불만요인에도 반영(3번에서 본격화)
-  if(typeof renderAIReport==='function') renderAIReport();
-}
-
 // ── 플라이휠
 const FLY=[
   ['키워드 탐색','트렌드 키워드 발굴'],['시장 기회 발견','기회 점수로 우선순위 선정'],
@@ -2964,13 +2887,6 @@ document.getElementById('fly').innerHTML=FLY.map((s,i)=>`
     <div class="fly-ar">→</div>
   </div>`).join('') + `<div class="fly-end">더 정확한 키워드 발굴로 다시 1번으로</div>`;
 
-// ── 긍정/부정 토글
-function rtab(btn,which){
-  document.getElementById('rpos').style.display = which==='pos'?'':'none';
-  document.getElementById('rneg').style.display = which==='neg'?'':'none';
-  btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-}
 // ── 탭/세그 활성 토글(시각용)
 // (일/주/월/년 세그는 onclick=setPeriod로 실제 재조회)
 
