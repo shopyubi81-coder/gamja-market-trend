@@ -440,21 +440,18 @@
       </div>
       <div class="r4">
         <div>
-          <div class="card-t">리뷰 요약 분석 <span id="revCount" style="font-size:10.5px;font-weight:700"></span></div>
-          <div class="rtoggle"><button class="on" onclick="rtab(this,'pos')">긍정 키워드</button><button class="neg" onclick="rtab(this,'neg')">부정 키워드</button></div>
+          <div class="card-t" id="revColTitle">키워드 분석 <span id="revCount" style="font-size:10.5px;font-weight:700"></span></div>
+          <div class="rtoggle" id="revToggle" style="display:none"><button class="on" onclick="rtab(this,'pos')">긍정 키워드</button><button class="neg" onclick="rtab(this,'neg')">부정 키워드</button></div>
           <div id="rpos"></div>
           <div id="rneg" style="display:none"></div>
         </div>
         <div>
-          <div class="card-t">리뷰 키워드 워드클라우드</div>
+          <div class="card-t">키워드 워드클라우드</div>
           <div class="cloud" id="revCloud"></div>
         </div>
         <div>
           <div class="card-t">리뷰 감성 분석</div>
-          <div class="donut-row" style="margin-top:6px">
-            <div id="donut"></div>
-            <div class="dleg" id="dleg"></div>
-          </div>
+          <div id="sentBox"></div>
         </div>
         <div>
           <div class="card-t">가격대별 분포 <span id="priceTag" class="pill a" style="font-size:8px">데모</span></div>
@@ -2857,34 +2854,61 @@ function revTokenize(text){
 }
 
 // 데모 리뷰(분석 전 기본 표시)
-const DEMO_REVIEW = { demo:true, total:12345,
-  pos:[['저소음',285],['배터리 오래감',243],['바람 세기',187],['휴대성',121],['디자인',86]],
-  neg:[['무게',310],['충전 속도',264],['내구성',192],['소음(고속)',131],['가격',103]],
-  cloud:[['저소음',25],['배터리',23],['가벼움',18],['바람세기',14],['디자인',13],['휴대성',12],['조용함',10],['시원함',9]],
-  posPct:78, neuPct:16, negPct:6, insight:null };
-
-function curReview(){ return state.review || DEMO_REVIEW; }
+function curReview(){ return state.review || null; }
 
 function barRow(label, num, max, color){
   const w=Math.max(6, Math.round(num/max*100));
   return `<div class="bar"><div class="bt"><b>${label}</b><span>${num}</span></div><div class="btrack"><div class="bfill" style="width:${w}%;background:${color}"></div></div></div>`;
 }
+// 리뷰를 붙여넣기 전엔 지어낸 감성 수치를 보여주지 않는다(예전엔 '저소음 선풍기'
+// 리뷰라는 고정 더미 데이터가 상품과 무관하게 항상 떠 있었음 — 구석 '데모' 배지
+// 하나로만 구분돼 실제 상품 데이터로 오인하기 쉬웠다).
+// 키워드는 대체할 실데이터가 있다 — 지금 검색 결과 상품명에서 뽑은 진짜 빈출 단어(titleTokens).
+// 감성(긍/부정 비율)은 대체할 실데이터가 없으므로 붙여넣기 전까지 정직하게 빈 상태로 둔다.
 function renderReview(){
   const rv=curReview();
   const cnt=document.getElementById('revCount');
-  if(cnt) cnt.innerHTML = rv.demo ? '<span class="pill a" style="font-size:8px">데모</span>' : `<span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건`;
-  const pmax=Math.max(...rv.pos.map(p=>p[1]),1), nmax=Math.max(...rv.neg.map(p=>p[1]),1);
-  const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=rv.pos.map(p=>barRow(p[0],p[1],pmax,'var(--green)')).join('')||'<div class="hint">긍정 키워드 없음</div>';
-  const rn=document.getElementById('rneg'); if(rn) rn.innerHTML=rv.neg.map(p=>barRow(p[0],p[1],nmax,'var(--red)')).join('')||'<div class="hint">부정 키워드 없음</div>';
-  // 워드클라우드
-  const cl=document.getElementById('revCloud');
-  if(cl){ const mx=Math.max(...rv.cloud.map(c=>c[1]),1); const cols=['var(--primary)','var(--purple)','var(--green)','var(--teal)','var(--amber)','var(--sub)'];
-    cl.innerHTML=rv.cloud.map((c,i)=>{ const sz=15+Math.round(c[1]/mx*23); return `<span style="font-size:${sz}px;font-weight:800;color:${cols[i%cols.length]}">${c[0]}</span>`; }).join(''); }
-  drawDonut(rv.posPct, rv.neuPct, rv.negPct);
-  const dl=document.getElementById('dleg');
-  if(dl) dl.innerHTML=`<div><span class="d" style="background:var(--green)"></span> 긍정 <b>${rv.posPct}%</b></div>
-    <div><span class="d" style="background:#9CA3AF"></span> 중립 <b>${rv.neuPct}%</b></div>
-    <div><span class="d" style="background:var(--red)"></span> 부정 <b>${rv.negPct}%</b></div>`;
+  const titleEl=document.getElementById('revColTitle');
+  const toggle=document.getElementById('revToggle');
+
+  if(rv){
+    if(cnt) cnt.innerHTML=`<span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건`;
+    if(titleEl) titleEl.innerHTML=`리뷰 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"></span>`;
+    if(toggle) toggle.style.display='flex';
+    const pmax=Math.max(...rv.pos.map(p=>p[1]),1), nmax=Math.max(...rv.neg.map(p=>p[1]),1);
+    const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=rv.pos.map(p=>barRow(p[0],p[1],pmax,'var(--green)')).join('')||'<div class="hint">긍정 키워드 없음</div>';
+    const rn=document.getElementById('rneg'); if(rn) rn.innerHTML=rv.neg.map(p=>barRow(p[0],p[1],nmax,'var(--red)')).join('')||'<div class="hint">부정 키워드 없음</div>';
+    renderCloud(rv.cloud);
+    const sb=document.getElementById('sentBox');
+    if(sb) sb.innerHTML=`<div class="donut-row" style="margin-top:6px"><div id="donut"></div><div class="dleg" id="dleg"></div></div>`;
+    drawDonut(rv.posPct, rv.neuPct, rv.negPct);
+    const dl=document.getElementById('dleg');
+    if(dl) dl.innerHTML=`<div><span class="d" style="background:var(--green)"></span> 긍정 <b>${rv.posPct}%</b></div>
+      <div><span class="d" style="background:#9CA3AF"></span> 중립 <b>${rv.neuPct}%</b></div>
+      <div><span class="d" style="background:var(--red)"></span> 부정 <b>${rv.negPct}%</b></div>`;
+    return;
+  }
+
+  // 리뷰 없음 — 경쟁 상품명 기반 실데이터로 키워드 칸만 채우고, 감성은 정직하게 빈 상태
+  const toks=(typeof titleTokens==='function') ? titleTokens() : [];
+  if(cnt) cnt.innerHTML=`<span class="pill g" style="font-size:8px">실측</span> 경쟁 상품명 ${state.products.length}개 기반`;
+  if(titleEl) titleEl.innerHTML=`경쟁 상품명 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"></span>`;
+  if(toggle) toggle.style.display='none';
+  const mx=Math.max(...toks.map(t=>t[1]),1);
+  const rp=document.getElementById('rpos');
+  if(rp) rp.innerHTML=toks.length ? toks.map(t=>barRow(t[0],t[1],mx,'var(--primary)')).join('') : '<div class="hint">분석할 상품명이 부족합니다</div>';
+  renderCloud(toks);
+  const sb=document.getElementById('sentBox');
+  if(sb) sb.innerHTML=`<div style="text-align:center;padding:16px 6px">
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.6">아직 분석할 리뷰가 없습니다.<br>실제 리뷰를 붙여넣으면 긍정·부정 비율이 표시됩니다.</div>
+      <button class="seln" style="margin-top:9px" onclick="openReview()">📝 리뷰 붙여넣기</button>
+    </div>`;
+}
+function renderCloud(items){
+  const cl=document.getElementById('revCloud'); if(!cl) return;
+  if(!items || !items.length){ cl.innerHTML='<div class="hint">분석할 키워드가 없습니다</div>'; return; }
+  const mx=Math.max(...items.map(c=>c[1]),1); const cols=['var(--primary)','var(--purple)','var(--green)','var(--teal)','var(--amber)','var(--sub)'];
+  cl.innerHTML=items.map((c,i)=>{ const sz=15+Math.round(c[1]/mx*23); return `<span style="font-size:${sz}px;font-weight:800;color:${cols[i%cols.length]}">${c[0]}</span>`; }).join('');
 }
 function drawDonut(pos,neu,neg){
   const el=document.getElementById('donut'); if(!el)return;
