@@ -2866,14 +2866,15 @@ function barRow(label, num, max, color){
 // 키워드는 대체할 실데이터가 있다 — 지금 검색 결과 상품명에서 뽑은 진짜 빈출 단어(titleTokens).
 // 감성(긍/부정 비율)은 대체할 실데이터가 없으므로 붙여넣기 전까지 정직하게 빈 상태로 둔다.
 function renderReview(){
+  // ⚠️ titleEl.innerHTML을 나중에 덮어쓰면 그 안의 #revCount 배지가 통째로 사라진다
+  // (innerHTML 재대입은 자식 노드를 새로 만들어 방금 넣은 내용을 지워버림) —
+  // 그래서 배지 텍스트를 titleEl 문자열 안에 한 번에 같이 넣는다.
   const rv=curReview();
-  const cnt=document.getElementById('revCount');
   const titleEl=document.getElementById('revColTitle');
   const toggle=document.getElementById('revToggle');
 
   if(rv){
-    if(cnt) cnt.innerHTML=`<span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건`;
-    if(titleEl) titleEl.innerHTML=`리뷰 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"></span>`;
+    if(titleEl) titleEl.innerHTML=`리뷰 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건</span>`;
     if(toggle) toggle.style.display='flex';
     const pmax=Math.max(...rv.pos.map(p=>p[1]),1), nmax=Math.max(...rv.neg.map(p=>p[1]),1);
     const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=rv.pos.map(p=>barRow(p[0],p[1],pmax,'var(--green)')).join('')||'<div class="hint">긍정 키워드 없음</div>';
@@ -2891,8 +2892,7 @@ function renderReview(){
 
   // 리뷰 없음 — 경쟁 상품명 기반 실데이터로 키워드 칸만 채우고, 감성은 정직하게 빈 상태
   const toks=(typeof titleTokens==='function') ? titleTokens() : [];
-  if(cnt) cnt.innerHTML=`<span class="pill g" style="font-size:8px">실측</span> 경쟁 상품명 ${state.products.length}개 기반`;
-  if(titleEl) titleEl.innerHTML=`경쟁 상품명 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"></span>`;
+  if(titleEl) titleEl.innerHTML=`경쟁 상품명 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">실측</span> 경쟁 상품명 ${state.products.length}개 기반</span>`;
   if(toggle) toggle.style.display='none';
   const mx=Math.max(...toks.map(t=>t[1]),1);
   const rp=document.getElementById('rpos');
