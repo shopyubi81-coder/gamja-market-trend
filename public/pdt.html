@@ -346,15 +346,6 @@
         <div class="rail-lbl">카테고리 필터 <span style="font-weight:600;color:var(--muted)">· 클릭=분석</span></div>
         <div id="railCats"></div>
       </div>
-      <div class="rail-sec">
-        <div class="rail-lbl">상품 랭킹</div>
-        <select class="sel" onchange="sortProducts(this.value)">
-          <option value="score">정렬 · 기회 점수순</option>
-          <option value="plow">가격 낮은순</option>
-          <option value="phigh">가격 높은순</option>
-        </select>
-        <div id="rank"></div>
-      </div>
     </aside>
 
     <!-- ① 상품 탐색 -->
@@ -363,11 +354,18 @@
         <span class="area-tag"><span class="cir">1</span> 상품 탐색 영역</span>
       </div>
       <div class="card-b">
-        <select class="sel" id="plistFilter" onchange="setPFilter(this.value)">
-          <option value="all">전체 상품</option>
-          <option value="below">중앙값 이하만 (저가 구간)</option>
-          <option value="above">중앙값 초과만 (고가 구간)</option>
-        </select>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <select class="sel" id="plistFilter" onchange="setPFilter(this.value)" style="flex:1;min-width:120px">
+            <option value="all">전체 상품</option>
+            <option value="below">중앙값 이하만 (저가 구간)</option>
+            <option value="above">중앙값 초과만 (고가 구간)</option>
+          </select>
+          <select class="sel" onchange="sortProducts(this.value)" style="flex:1;min-width:120px">
+            <option value="score">정렬 · 기회 점수순</option>
+            <option value="plow">가격 낮은순</option>
+            <option value="phigh">가격 높은순</option>
+          </select>
+        </div>
         <div id="plistNote" style="font-size:10.5px;color:var(--muted);font-weight:600;margin:5px 2px 7px"></div>
         <div id="plist"></div>
       </div>
@@ -441,16 +439,13 @@
       <!-- 키워드+바를 한 줄로 합치고(예전엔 목록형 바+별도 워드클라우드로 두 번 차지),
            리뷰가 없을 때 늘 비어 있던 '리뷰 감성 분석' 칸은 없앴다(공간 확보, Founder 요청).
            실제 리뷰를 붙여넣은 뒤에는 감성 비율을 제목 옆 작은 배지로만 보여준다. -->
-      <div class="r4" style="grid-template-columns:1.3fr 1fr">
-        <div>
+      <!-- 가격대별 분포는 ②상품분석의 '가격 분석' 탭과 내용이 겹쳐 삭제(Founder 지적) -->
+      <div class="r4" style="grid-template-columns:1fr">
+        <div style="border-right:none">
           <div class="card-t" id="revColTitle">키워드 분석 <span id="revCount" style="font-size:10.5px;font-weight:700"></span></div>
           <div class="rtoggle" id="revToggle" style="display:none"><button class="on" onclick="rtab(this,'pos')">긍정 키워드</button><button class="neg" onclick="rtab(this,'neg')">부정 키워드</button></div>
-          <div id="rpos" style="max-height:236px;overflow-y:auto"></div>
-          <div id="rneg" style="display:none;max-height:236px;overflow-y:auto"></div>
-        </div>
-        <div>
-          <div class="card-t">가격대별 분포 <span id="priceTag" class="pill a" style="font-size:8px">데모</span></div>
-          <div id="priceDist" style="margin-top:10px"></div>
+          <div id="rpos" style="max-height:180px;overflow-y:auto"></div>
+          <div id="rneg" style="display:none;max-height:180px;overflow-y:auto"></div>
         </div>
       </div>
     </section>
@@ -750,7 +745,7 @@ function jumpTo(dir){
   window.scrollTo({top:target, behavior:'smooth'});
 }
 
-function paint(){ renderProducts(); renderRank(); renderKpis(); renderTitle(); renderTabBody(); renderPriceDist(); renderReview(); renderAIReport(); renderRailCats();
+function paint(){ renderProducts(); renderKpis(); renderTitle(); renderTabBody(); renderReview(); renderAIReport(); renderRailCats();
   const nv=document.getElementById('mainNav'); if(nv) nv.innerHTML=mainStepNav(); }
 
 // ── ② 탭: 트렌드/가격분석/경쟁비교/판매/시즌성
@@ -1021,13 +1016,6 @@ function renderProducts(){
   el.innerHTML=html;
 }
 function toggleAll(){ state.showAll=!state.showAll; renderProducts(); }
-function renderRank(){
-  const el=document.getElementById('rank'); if(!el)return;
-  el.innerHTML=state.products.slice(0,5).map((p,i)=>{
-    const cls=p.score>=80?'':p.score>=68?'b':'c';
-    return `<div class="rk ${i===state.selected?'on':''}" onclick="selectProduct(${i})"><span class="rn">${i+1}</span><span class="rnm">${p.name}</span><span class="rsc ${cls}">${p.score}</span></div>`;
-  }).join('');
-}
 function renderKpis(){
   const el=document.getElementById('kpis'); if(!el)return;
   const p=state.products[state.selected]||{};
@@ -1049,7 +1037,7 @@ function renderKpis(){
 }
 function renderTitle(){ const t=document.getElementById('ptitle'); if(t){ const p=state.products[state.selected]; t.textContent=p?p.name:state.query; } }
 function selectProduct(i){ state.selected=i; const p=state.products[i];
-  renderProducts(); renderRank(); renderKpis(); renderTitle(); renderTabBody(); renderAIReport();
+  renderProducts(); renderKpis(); renderTitle(); renderTabBody(); renderAIReport();
   if(p) setTrendFor(p.name).then(()=>{ renderTabBody(); renderAIReport(); });   // 상품별 검색어 트렌드
 }
 
@@ -1082,7 +1070,7 @@ function sortProducts(mode){
   if(mode==='plow') state.products.sort((a,b)=>(a.price||1e12)-(b.price||1e12));
   else if(mode==='phigh') state.products.sort((a,b)=>(b.price||0)-(a.price||0));
   else state.products.sort((a,b)=>b.score-a.score);
-  state.selected=0; renderProducts(); renderRank(); renderTitle(); renderKpis(); renderTabBody(); renderAIReport();
+  state.selected=0; renderProducts(); renderTitle(); renderKpis(); renderTabBody(); renderAIReport();
 }
 
 // ── 관심(watchlist) · localStorage
@@ -2885,19 +2873,16 @@ function barRow(label, num, max, color){
 // 별도 워드클라우드 칸으로 같은 정보를 두 번, 세로로 길게 차지했다(Founder 지적:
 // 전체화면일수록 이 영역만 유독 길어져 보기 불편함). 한 줄에 단어+바+숫자를 다 넣어
 // 항목이 많아도 세로 공간을 절반 이하로 줄인다.
-function kwChipRow(items, color){
+// 워드클라우드형 — 단어 크기로 빈도를 표현(Founder 요청: 바챠트 → 클라우드).
+// color를 주면(긍/부정 키워드) 단색, 안 주면(경쟁 상품명) 알록달록 팔레트를 순환.
+function kwCloud(items, color){
   if(!items || !items.length) return '<div class="hint">데이터 없음</div>';
   const mx=Math.max(...items.map(t=>t[1]),1);
-  return `<div style="display:flex;flex-direction:column;gap:7px">` + items.map(([w,n])=>{
-    const pct=Math.max(10, Math.round(n/mx*100));
-    return `<div style="display:flex;align-items:center;gap:8px">
-      <span style="flex:0 0 auto;font-size:12px;font-weight:800;max-width:88px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${w}">${w}</span>
-      <span style="flex:1;height:7px;border-radius:4px;background:var(--line2);overflow:hidden;min-width:30px">
-        <span style="display:block;height:100%;width:${pct}%;background:${color||'var(--primary)'};border-radius:4px"></span>
-      </span>
-      <span style="flex:0 0 20px;font-size:10.5px;color:var(--muted);text-align:right">${n}</span>
-    </div>`;
-  }).join('') + `</div>`;
+  const palette=color ? [color] : ['var(--primary)','var(--purple)','var(--green)','var(--teal)','var(--amber)','var(--sub)'];
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;padding:4px 2px">` +
+    items.map(([w,n],i)=>{ const sz=13+Math.round(n/mx*21);
+      return `<span style="font-size:${sz}px;font-weight:800;color:${palette[i%palette.length]};line-height:1.3" title="${w} (${n}회)">${w}</span>`; }).join('') +
+    `</div>`;
 }
 // 리뷰를 붙여넣기 전엔 지어낸 감성 수치를 보여주지 않는다(예전엔 '저소음 선풍기'
 // 리뷰라는 고정 더미 데이터가 상품과 무관하게 항상 떠 있었음 — 구석 '데모' 배지
@@ -2917,8 +2902,8 @@ function renderReview(){
     const sentBadge=` · 😊${rv.posPct}% 😐${rv.neuPct}% 😞${rv.negPct}%`;
     if(titleEl) titleEl.innerHTML=`리뷰 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">실분석</span> 총 ${rv.total}건${sentBadge}</span>`;
     if(toggle) toggle.style.display='flex';
-    const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=kwChipRow(rv.pos,'var(--green)');
-    const rn=document.getElementById('rneg'); if(rn) rn.innerHTML=kwChipRow(rv.neg,'var(--red)');
+    const rp=document.getElementById('rpos'); if(rp) rp.innerHTML=kwCloud(rv.pos,'var(--green)');
+    const rn=document.getElementById('rneg'); if(rn) rn.innerHTML=kwCloud(rv.neg,'var(--red)');
     return;
   }
 
@@ -2927,7 +2912,7 @@ function renderReview(){
   if(titleEl) titleEl.innerHTML=`경쟁 상품명 키워드 <span id="revCount" style="font-size:10.5px;font-weight:700"><span class="pill g" style="font-size:8px">실측</span> 경쟁 상품명 ${state.products.length}개 기반 · <a href="#" onclick="openReview();return false" style="color:var(--primary);font-weight:700">📝 리뷰 붙여넣기</a></span>`;
   if(toggle) toggle.style.display='none';
   const rp=document.getElementById('rpos');
-  if(rp) rp.innerHTML=kwChipRow(toks,'var(--primary)');
+  if(rp) rp.innerHTML=kwCloud(toks);
 }
 function drawDonut(pos,neu,neg){
   const el=document.getElementById('donut'); if(!el)return;
@@ -2942,22 +2927,6 @@ function drawDonut(pos,neu,neg){
 }
 
 // 가격대별 분포 — 실상품 가격(실데이터)로 집계
-function renderPriceDist(){
-  const el=document.getElementById('priceDist'); if(!el)return;
-  const tag=document.getElementById('priceTag');
-  const buckets=[['~3만원',0,30000],['3~5만원',30000,50000],['5~7만원',50000,70000],['7~10만원',70000,100000],['10만원~',100000,Infinity]];
-  const prices=state.products.map(p=>p.price).filter(Boolean);
-  if(state.live && prices.length){
-    if(tag){tag.className='pill g';tag.style.fontSize='8px';tag.textContent='실시간';}
-    const counts=buckets.map(b=>prices.filter(p=>p>=b[1]&&p<b[2]).length);
-    const mx=Math.max(...counts,1);
-    el.innerHTML=buckets.map((b,i)=>barRow(b[0],counts[i],mx,'var(--primary)')).join('');
-  } else {
-    if(tag){tag.className='pill a';tag.style.fontSize='8px';tag.textContent='데모';}
-    const demo=[['~3만원',2],['3~5만원',5],['5~7만원',3],['7~10만원',1],['10만원~',1]]; const mx=5;
-    el.innerHTML=demo.map(d=>barRow(d[0],d[1],mx,'var(--primary)')).join('');
-  }
-}
 
 // 모달 + 실제 분석
 function openReview(){ const p=state.products[state.selected]; document.getElementById('revProduct').value=p?p.name:state.query; document.getElementById('revOv').classList.add('on'); }
